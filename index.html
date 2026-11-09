@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cotizador Gary</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<header class="topbar no-print">
+  <div class="brand">Cotizador <b>Gary</b></div>
+  <nav id="tabs">
+    <button data-view="cotizar" class="active">Cotizar</button>
+    <button data-view="cotizaciones">Cotizaciones</button>
+    <button data-view="ots">Órdenes de trabajo</button>
+    <button data-view="matriz">Matriz de costos</button>
+    <button data-view="config">Configuración</button>
+  </nav>
+</header>
+
+<main class="no-print">
+  <!-- ============ COTIZAR ============ -->
+  <section id="view-cotizar" class="view active">
+    <div class="view-head">
+      <h1 id="cotTitulo">Nueva cotización</h1>
+      <div class="actions">
+        <button class="btn ghost" id="btnNueva">Nueva</button>
+        <button class="btn" id="btnGuardar">Guardar</button>
+        <button class="btn primary" id="btnPdf">Guardar y generar PDF</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Cliente</h2>
+        <div class="fields">
+          <label>Nombre o razón social<input data-c="nombre"></label>
+          <label>RUT<input data-c="rut" placeholder="12.345.678-9"></label>
+          <label>Contacto<input data-c="contacto"></label>
+          <label>Teléfono<input data-c="telefono"></label>
+          <label>Email<input data-c="email" type="email"></label>
+          <label>Dirección de despacho<input data-c="direccion"></label>
+          <label>Comuna / ciudad<input data-c="comuna"></label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Condiciones</h2>
+        <div class="fields">
+          <label>Condición de pago<input data-d="condPago"></label>
+          <label>Plazo de entrega<input data-d="plazo"></label>
+          <label>Validez de la oferta<input data-d="validez"></label>
+          <label class="wide">Observaciones (salen en la cotización)<textarea data-d="obs" rows="3"></textarea></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row-between">
+        <h2>Productos</h2>
+        <div class="margen-global">
+          <span>Margen para todos:</span>
+          <span class="chips" id="chipsGlobal"></span>
+        </div>
+      </div>
+      <div id="items"></div>
+      <div class="add-row">
+        <button class="btn" id="btnAddItem">+ Agregar bandera</button>
+        <button class="btn ghost" id="btnAddLibre">+ Ítem libre</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Despacho Correos de Chile</h2>
+      <div class="fields three">
+        <label>Costo para nosotros (neto)<input type="number" min="0" id="despCosto"></label>
+        <label>Cobro al cliente (neto)<input type="number" min="0" id="despCobro"></label>
+        <label>Detalle<input id="despNota" placeholder="Ej: Correos de Chile a Punta Arenas"></label>
+      </div>
+      <p class="hint">Por ahora el monto se ingresa a mano. Cuando tengamos las tarifas de Correos, se va a calcular solo. El despacho entra en el costo y en el margen total.</p>
+    </div>
+
+    <div class="card resumen">
+      <h2>Resumen</h2>
+      <div class="totales" id="totales"></div>
+      <p class="hint">Costo y margen son internos: no aparecen en la cotización que recibe el cliente.</p>
+    </div>
+  </section>
+
+  <!-- ============ COTIZACIONES ============ -->
+  <section id="view-cotizaciones" class="view">
+    <div class="view-head">
+      <h1>Cotizaciones</h1>
+      <input id="buscaCot" class="search" placeholder="Buscar por número o cliente">
+    </div>
+    <div class="card table-wrap"><table class="list" id="tablaCot"></table></div>
+  </section>
+
+  <!-- ============ OTs ============ -->
+  <section id="view-ots" class="view">
+    <div class="view-head"><h1>Órdenes de trabajo</h1></div>
+    <div class="card table-wrap"><table class="list" id="tablaOt"></table></div>
+  </section>
+
+  <!-- ============ MATRIZ ============ -->
+  <section id="view-matriz" class="view">
+    <div class="view-head">
+      <h1>Matriz de costos</h1>
+      <div class="actions">
+        <select id="filtroTipo"></select>
+        <button class="btn" id="btnAddFila">+ Agregar fila</button>
+        <button class="btn" id="btnPegar">Pegar desde Excel</button>
+      </div>
+    </div>
+    <div id="avisoEjemplo" class="aviso">Estos costos son <b>de ejemplo</b>. Reemplázalos por los reales: edítalos acá o usa “Pegar desde Excel”.</div>
+    <div class="card table-wrap"><table class="list editable" id="tablaMatriz"></table></div>
+
+    <dialog id="dlgPegar">
+      <h2>Pegar desde Excel</h2>
+      <p>Copia desde Excel 4 columnas en este orden: <b>Tipo · Material · Medida · Costo neto</b>, y pégalas abajo. Medida como “1,20 x 1,80”.</p>
+      <textarea id="txtPegar" rows="10" placeholder="Banderas normales (uniones) 1/Faz	Poliéster	1,20 x 1,80	15000"></textarea>
+      <label class="check"><input type="checkbox" id="chkReemplazar"> Reemplazar toda la matriz (si no, agrega y actualiza)</label>
+      <div class="actions end">
+        <button class="btn ghost" id="btnPegarCancelar">Cancelar</button>
+        <button class="btn primary" id="btnPegarOk">Importar</button>
+      </div>
+    </dialog>
+  </section>
+
+  <!-- ============ CONFIG ============ -->
+  <section id="view-config" class="view">
+    <div class="view-head"><h1>Configuración</h1></div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Datos de la empresa (encabezado de la cotización)</h2>
+        <div class="fields">
+          <label>Nombre<input data-cfg="empresa"></label>
+          <label>RUT<input data-cfg="rutEmpresa"></label>
+          <label>Giro<input data-cfg="giro"></label>
+          <label>Dirección<input data-cfg="dirEmpresa"></label>
+          <label>Teléfono<input data-cfg="fonoEmpresa"></label>
+          <label>Email<input data-cfg="mailEmpresa"></label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Valores por defecto</h2>
+        <div class="fields">
+          <label>Condición de pago<input data-cfg="condPago"></label>
+          <label>Plazo de entrega<input data-cfg="plazo"></label>
+          <label>Validez de la oferta<input data-cfg="validez"></label>
+          <label>Margen por defecto (%)<input type="number" data-cfg="margenDef"></label>
+          <label>Redondear precio unitario hacia arriba a
+            <select data-cfg="redondeo">
+              <option value="1">$1 (sin redondeo)</option>
+              <option value="10">$10</option>
+              <option value="100">$100</option>
+              <option value="1000">$1.000</option>
+            </select>
+          </label>
+          <label>Próximo N° de cotización<input type="number" data-cfg="nextCot"></label>
+          <label>Próximo N° de OT<input type="number" data-cfg="nextOt"></label>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Respaldo</h2>
+      <p class="hint">Por ahora los datos quedan guardados en este navegador. Pronto se van a guardar en la nube y van a ser compartidos entre todos.</p>
+      <div class="actions">
+        <button class="btn" id="btnExport">Descargar respaldo</button>
+        <label class="btn">Restaurar respaldo<input type="file" id="fileImport" accept=".json" hidden></label>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Área de impresión (cotización / OT) -->
+<div id="print" class="print-only"></div>
+
+<div id="toast" class="no-print"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
