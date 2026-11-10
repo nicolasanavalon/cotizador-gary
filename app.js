@@ -175,7 +175,8 @@ const saveOts = () => Store.set('ots', OTS);
 const saveDraft = () => Store.set('borrador', D);
 
 /* ---------------- Nube (Google Sheets vía Apps Script) ---------------- */
-const NUBE_URL = window.__NUBE_URL__ || '';   // URL del servidor; vacío = solo este navegador
+const NUBE_URL = window.__NUBE_URL__ ||
+  'https://script.google.com/macros/s/AKfycbzBANnMMcT3isEE8EJPwIbduOYacMxLan9E8pp_MYiv7AblOEDqx2oHGoSr7WJiWeb4Cg/exec';
 const nubeActiva = () => !!NUBE_URL;
 function estadoNube(txt, tipo) { const el = $('#nube'); if (el) { el.textContent = txt; el.className = 'nube ' + tipo; } }
 let cambios = 0;   // cuenta los guardados; sirve para descartar lecturas que quedaron viejas
