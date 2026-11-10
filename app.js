@@ -183,14 +183,24 @@ let cambios = 0;   // cuenta los guardados; sirve para descartar lecturas que qu
 async function api(accion, datos = {}) {
   if (accion !== 'cargar') cambios++;
   estadoNube(accion === 'cargar' ? 'Actualizando…' : 'Guardando…', 'sync');
-  let r;
-  try {
-    r = await fetch(NUBE_URL, { method: 'POST', redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ ...datos, accion }) });
-  } catch (e) { estadoNube('Sin conexión', 'off'); throw new Error('sin conexión a internet'); }
+  const espera = ms => new Promise(r => setTimeout(r, ms));
   let j;
-  try { j = await r.json(); } catch (e) { estadoNube('Error', 'off'); throw new Error('respuesta inválida del servidor'); }
+  for (let intento = 1; ; intento++) {
+    let r;
+    try {
+      r = await fetch(NUBE_URL, { method: 'POST', redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ ...datos, accion }) });
+      j = await r.json();
+    } catch (e) {
+      // Leer se puede reintentar sin riesgo; un guardado no (podría haber quedado hecho).
+      if (accion === 'cargar' && intento < 3) { await espera(2000 * intento); continue; }
+      estadoNube('Sin conexión', 'off'); throw new Error('sin conexión con el servidor');
+    }
+    // "Ocupado" = el servidor no alcanzó a hacer nada: se puede reintentar siempre.
+    if (j && j.error && /ocupado/i.test(j.error) && intento < 4) { await espera(1500 * intento); continue; }
+    break;
+  }
   if (!j.ok) { estadoNube('Error', 'off'); throw new Error(j.error || 'error del servidor'); }
   estadoNube('● En línea', 'on');
   return j;
