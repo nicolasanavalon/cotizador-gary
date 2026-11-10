@@ -6,9 +6,7 @@
  * La pestaña "Matriz" se puede editar a mano directo en la planilla.
  *
  * INSTALACIÓN (una sola vez): ver README.md, sección "Nube".
- * La clave de abajo es la que pide la app la primera vez en cada equipo.
  */
-const CLAVE = 'PONER_AQUI_LA_CLAVE';
 
 const HOJAS = {
   Cotizaciones: ['N°', 'Fecha', 'Cliente', 'RUT', 'Neto', 'Total bruto', 'Margen %', 'Estado', 'OT', 'id', 'datos'],
@@ -25,7 +23,6 @@ function doPost(e) {
   return manejar_(b);
 }
 function manejar_(b) {
-  if (!b.clave || String(b.clave) !== CLAVE) return out_({ ok: false, error: 'clave' });
   const fn = ACCIONES[b.accion];
   if (!fn) return out_({ ok: false, error: 'Acción desconocida' });
   const lock = LockService.getScriptLock();

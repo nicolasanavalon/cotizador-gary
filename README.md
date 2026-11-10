@@ -29,11 +29,8 @@ Apps Script publicado como aplicación web (`servidor/Codigo.gs`).
 
 - Los números correlativos de cotización y OT los asigna el servidor (no se repiten aunque
   dos personas guarden a la vez).
-- Cada equipo pide la **clave del taller** una sola vez (va en `CLAVE` dentro del script
-  instalado; en este repo público queda como `PONER_AQUI_LA_CLAVE`).
 - La pestaña `Matriz` se puede editar directo en la planilla.
 - La URL del script va en `NUBE_URL` (app.js). Si está vacía, la app funciona solo en el navegador.
 
-Instalación (una vez): crear la planilla → Extensiones → Apps Script → pegar el código con la
-clave → Implementar → Nueva implementación → Aplicación web (Ejecutar como: yo; Acceso:
+Instalación (una vez): crear la planilla → Extensiones → Apps Script → pegar el código → Implementar → Nueva implementación → Aplicación web (Ejecutar como: yo; Acceso:
 cualquier persona) → copiar la URL a `NUBE_URL`.

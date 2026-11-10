@@ -177,35 +177,19 @@ const saveDraft = () => Store.set('borrador', D);
 /* ---------------- Nube (Google Sheets vía Apps Script) ---------------- */
 const NUBE_URL = window.__NUBE_URL__ || '';   // URL del servidor; vacío = solo este navegador
 const nubeActiva = () => !!NUBE_URL;
-let CLAVE = Store.get('clave', '');
 function estadoNube(txt, tipo) { const el = $('#nube'); if (el) { el.textContent = txt; el.className = 'nube ' + tipo; } }
-function pedirClave(error) {
-  return new Promise(res => {
-    const dlg = $('#dlgClave');
-    $('#claveError').textContent = error ? 'Clave incorrecta. Intenta de nuevo.' : '';
-    $('#txtClave').value = '';
-    dlg.oncancel = e => e.preventDefault();          // no se puede cerrar sin clave
-    $('#formClave').onsubmit = () => {
-      CLAVE = $('#txtClave').value.trim(); Store.set('clave', CLAVE); setTimeout(res, 0);
-    };
-    if (!dlg.open) dlg.showModal();
-    setTimeout(() => $('#txtClave').focus(), 50);
-  });
-}
 let cambios = 0;   // cuenta los guardados; sirve para descartar lecturas que quedaron viejas
 async function api(accion, datos = {}) {
-  if (!CLAVE) await pedirClave(false);
   if (accion !== 'cargar') cambios++;
   estadoNube(accion === 'cargar' ? 'Actualizando…' : 'Guardando…', 'sync');
   let r;
   try {
     r = await fetch(NUBE_URL, { method: 'POST', redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ ...datos, clave: CLAVE, accion }) });
+      body: JSON.stringify({ ...datos, accion }) });
   } catch (e) { estadoNube('Sin conexión', 'off'); throw new Error('sin conexión a internet'); }
   let j;
   try { j = await r.json(); } catch (e) { estadoNube('Error', 'off'); throw new Error('respuesta inválida del servidor'); }
-  if (j.error === 'clave') { estadoNube('Falta clave', 'off'); await pedirClave(true); return api(accion, datos); }
   if (!j.ok) { estadoNube('Error', 'off'); throw new Error(j.error || 'error del servidor'); }
   estadoNube('● En línea', 'on');
   return j;
