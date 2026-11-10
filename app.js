@@ -19,7 +19,11 @@ const TIPOS_DEF = [
   'Cuadra',
   'Bandera especial (c/estrellas, Magallanes, Viña, etc.)',
 ];
-const MATERIALES_DEF = ['Raso', 'Poliéster', 'Microperforado', 'Oxford', 'Raquelado'];
+const MATERIALES_DEF = ['Raso', 'Bistrech', 'Microperforado', 'Oxford', 'Raquelado'];
+const CONDICIONES_PAGO = [
+  'Crédito a 7 días', 'Crédito a 15 días', 'Crédito a 30 días', 'Transferencia anticipada',
+  '50% anticipo y 50% contra entrega', '100% contra entrega',
+];
 const REGIONES = ['Arica y Parinacota', 'Tarapacá', 'Antofagasta', 'Atacama', 'Coquimbo', 'Valparaíso',
   'Metropolitana', "O'Higgins", 'Maule', 'Ñuble', 'Biobío', 'La Araucanía', 'Los Ríos', 'Los Lagos',
   'Aysén', 'Magallanes'];
@@ -41,18 +45,18 @@ const CONFIG_DEF = {
 
 /* Matriz de EJEMPLO: costo ≈ área × $/m² del material × factor del tipo + base. */
 function matrizEjemplo() {
-  const medidas = ['0,60 x 0,90', '0,90 x 1,35', '1,20 x 1,80', '1,50 x 2,25', '2,00 x 3,00'];
-  const m2 = { 'Raso': 6500, 'Poliéster': 4200, 'Microperforado': 5200, 'Oxford': 5600, 'Raquelado': 4800 };
+  const medidas = ['0,90 x 0,60', '1,35 x 0,90', '1,80 x 1,20', '2,25 x 1,50', '3,00 x 2,00'];
+  const m2 = { 'Raso': 6500, 'Bistrech': 4200, 'Microperforado': 5200, 'Oxford': 5600, 'Raquelado': 4800 };
   const tipos = [
-    [TIPOS_DEF[0], ['Raso', 'Poliéster', 'Oxford'], 1.6, 3500],
-    [TIPOS_DEF[1], ['Raso', 'Poliéster', 'Oxford'], 2.6, 5000],
-    [TIPOS_DEF[2], ['Raso', 'Poliéster', 'Oxford'], 1.3, 2500],
+    [TIPOS_DEF[0], ['Raso', 'Bistrech', 'Oxford'], 1.6, 3500],
+    [TIPOS_DEF[1], ['Raso', 'Bistrech', 'Oxford'], 2.6, 5000],
+    [TIPOS_DEF[2], ['Raso', 'Bistrech', 'Oxford'], 1.3, 2500],
     [TIPOS_DEF[3], ['Raso', 'Oxford'], 2.2, 6000],
-    [TIPOS_DEF[4], ['Poliéster', 'Microperforado', 'Raquelado'], 1.8, 2000],
-    [TIPOS_DEF[5], ['Poliéster', 'Oxford'], 1.5, 3000],
-    [TIPOS_DEF[6], ['Poliéster', 'Oxford'], 1.5, 3000],
-    [TIPOS_DEF[7], ['Raso', 'Poliéster'], 1.4, 2500],
-    [TIPOS_DEF[8], ['Raso', 'Poliéster'], 2.4, 6000],
+    [TIPOS_DEF[4], ['Bistrech', 'Microperforado', 'Raquelado'], 1.8, 2000],
+    [TIPOS_DEF[5], ['Bistrech', 'Oxford'], 1.5, 3000],
+    [TIPOS_DEF[6], ['Bistrech', 'Oxford'], 1.5, 3000],
+    [TIPOS_DEF[7], ['Raso', 'Bistrech'], 1.4, 2500],
+    [TIPOS_DEF[8], ['Raso', 'Bistrech'], 2.4, 6000],
   ];
   const rows = [];
   for (const [tipo, mats, f, base] of tipos)
@@ -117,9 +121,11 @@ function areaDe(medida) {
 function normMedida(s) {
   const m = String(s).replace(/,/g, '.').match(/([\d.]+)\s*[x×*]\s*([\d.]+)/i);
   if (!m) return String(s).trim();
-  const f = v => parseFloat(v).toFixed(2).replace('.', ',');
-  return `${f(m[1])} x ${f(m[2])}`;
+  const f = v => v.toFixed(2).replace('.', ',');
+  const a = parseFloat(m[1]), b = parseFloat(m[2]);
+  return `${f(Math.max(a, b))} x ${f(Math.min(a, b))}`;   // siempre la medida mayor primero
 }
+const miles = n => (+n ? Math.round(+n).toLocaleString('es-CL') : '');
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2600);
@@ -150,6 +156,17 @@ if (!D.id) {
   if (!esNumero(D.plazo)) D.plazo = '';
   if (!esNumero(D.validez)) D.validez = '';
 }
+
+/* Migración: Poliéster -> Bistrech y medidas con la mayor primero */
+(function migrar() {
+  const mat = m => m === 'Poliéster' ? 'Bistrech' : m;
+  const fix = x => { if (!x) return; if (x.material) x.material = mat(x.material); if (x.medida) x.medida = normMedida(x.medida); };
+  CFG.materiales = [...new Set((CFG.materiales || MATERIALES_DEF).map(mat))];
+  MATRIZ.forEach(fix);
+  [D, ...COTS, ...OTS].forEach(c => (c.items || []).forEach(fix));
+  Store.set('config', CFG); Store.set('matriz', MATRIZ); Store.set('cotizaciones', COTS);
+  Store.set('ots', OTS); Store.set('borrador', D);
+})();
 
 const saveCfg = () => Store.set('config', CFG);
 const saveMatriz = () => { Store.set('matriz', MATRIZ); Store.set('matrizEjemplo', MATRIZ_EJEMPLO); };
@@ -222,9 +239,10 @@ function renderEditor() {
   $('#cotTitulo').textContent = D.numero ? `Cotización N° ${D.numero}` : 'Nueva cotización';
   $$('[data-c]').forEach(i => i.value = D.cliente[i.dataset.c] || '');
   marcarRut($('[data-c="rut"]'));
+  llenarCondPago($('[data-d="condPago"]'), D.condPago);
   $$('[data-d]').forEach(i => i.value = D[i.dataset.d] || '');
-  $('#despCosto').value = D.despacho.costo || '';
-  $('#despCobro').value = D.despacho.cobro || '';
+  $('#despCosto').value = miles(D.despacho.costo);
+  $('#despCobro').value = miles(D.despacho.cobro);
   $('#despNota').value = D.despacho.nota || '';
   renderFechas();
   renderChipsGlobal();
@@ -261,7 +279,7 @@ function renderItems() {
       campos = `<div class="item-grid libre">
         <label>Descripción<input data-f="descripcion" value="${esc(it.descripcion)}" placeholder="Ej: Mástil de aluminio 3 m"></label>
         <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
-        <label>Costo unitario neto<input type="number" min="0" data-f="costo" value="${esc(it.costo || '')}"></label>
+        <label>Costo unitario neto<input data-money inputmode="numeric" data-f="costo" value="${miles(it.costo)}"></label>
       </div>`;
     } else {
       const mats = it.tipo ? opcionesMaterial(it.tipo) : [];
@@ -273,7 +291,7 @@ function renderItems() {
         <label>Material<select data-f="material" ${it.tipo ? '' : 'disabled'}><option value="">Elegir…</option>${mats.map(m => opt(m, it.material)).join('')}</select></label>
         <label>Medida (m)<select data-f="medida" ${it.material ? '' : 'disabled'}><option value="">Elegir…</option>${meds.map(m => opt(m, it.medida)).join('')}</select></label>
         <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
-        <label>Costo unit. neto${modificado ? ' <span title="Distinto a la matriz">✎</span>' : ''}<input type="number" min="0" data-f="costo" value="${esc(it.costo || '')}"></label>
+        <label>Costo unit. neto${modificado ? ' <span title="Distinto a la matriz">✎</span>' : ''}<input data-money inputmode="numeric" data-f="costo" value="${miles(it.costo)}"></label>
       </div>
       ${it.tipo && !mats.length ? '<div class="warn-txt">Este tipo aún no tiene costos en la matriz. Agrégalos en “Matriz de costos” o escribe el costo a mano.</div>' : ''}`;
     }
@@ -363,6 +381,17 @@ $$('[data-d]').forEach(i => i.oninput = () => { D[i.dataset.d] = i.value; saveDr
 $('#selRegion').innerHTML = '<option value="">Elegir…</option>' + REGIONES.map(r => `<option>${esc(r)}</option>`).join('');
 $('#selRegion').onchange = e => { D.cliente.region = e.target.value; saveDraft(); };
 
+/* Montos: separador de miles mientras se escribe */
+document.addEventListener('input', e => {
+  if (!e.target.matches('[data-money]')) return;
+  const inp = e.target, antes = inp.value, pos = inp.selectionStart ?? antes.length;
+  const sig = antes.slice(0, pos).replace(/\D/g, '').replace(/^0+(?=\d)/, '').length;
+  const dig = antes.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  inp.value = dig ? (+dig).toLocaleString('es-CL') : '';
+  let p = 0, k = 0; while (p < inp.value.length && k < sig) { if (/\d/.test(inp.value[p])) k++; p++; }
+  try { inp.setSelectionRange(p, p); } catch (_) {}
+}, true);
+
 /* RUT: se formatea solo mientras se escribe (antes que los demás handlers) */
 function marcarRut(inp) {
   const msg = inp.parentElement.querySelector('.rut-msg'); if (!msg) return;
@@ -381,7 +410,7 @@ document.addEventListener('input', e => {
 }, true);
 $('#despCosto').oninput = e => {
   const nuevo = num(e.target.value);
-  if (+D.despacho.cobro === +D.despacho.costo) { D.despacho.cobro = nuevo; $('#despCobro').value = nuevo || ''; }
+  if (+D.despacho.cobro === +D.despacho.costo) { D.despacho.cobro = nuevo; $('#despCobro').value = miles(nuevo); }
   D.despacho.costo = nuevo; recalc();
 };
 $('#despCobro').oninput = e => { D.despacho.cobro = num(e.target.value); recalc(); };
@@ -571,12 +600,12 @@ function renderMatriz() {
   $('#avisoEjemplo').style.display = MATRIZ_EJEMPLO ? '' : 'none';
   const rows = MATRIZ.filter(r => !f.value || r.tipo === f.value)
     .sort((a, b) => CFG.tipos.indexOf(a.tipo) - CFG.tipos.indexOf(b.tipo) || a.material.localeCompare(b.material) || areaDe(a.medida) - areaDe(b.medida));
-  $('#tablaMatriz').innerHTML = `<thead><tr><th>Tipo</th><th>Material</th><th>Medida (alto x ancho, m)</th><th class="num">Costo neto</th><th></th></tr></thead><tbody>` +
+  $('#tablaMatriz').innerHTML = `<thead><tr><th>Tipo</th><th>Material</th><th>Medida (largo x ancho, m)</th><th class="num">Costo neto</th><th></th></tr></thead><tbody>` +
     (rows.map(r => `<tr data-id="${r.id}">
       <td><select data-k="tipo">${CFG.tipos.concat(CFG.tipos.includes(r.tipo) ? [] : [r.tipo]).map(t => opt(t, r.tipo)).join('')}</select></td>
       <td><select data-k="material">${CFG.materiales.concat(CFG.materiales.includes(r.material) ? [] : [r.material]).map(m => opt(m, r.material)).join('')}</select></td>
       <td><input data-k="medida" value="${esc(r.medida)}"></td>
-      <td class="num"><input class="costo" type="number" min="0" data-k="costo" value="${esc(r.costo)}"></td>
+      <td class="num"><input class="costo" data-money inputmode="numeric" data-k="costo" value="${miles(r.costo)}"></td>
       <td class="acc"><button class="btn sm ghost danger" data-a="del">✕</button></td></tr>`).join('') ||
       '<tr><td colspan="5" class="empty">No hay filas para este tipo.</td></tr>') + '</tbody>';
 }
@@ -593,7 +622,7 @@ $('#tablaMatriz').addEventListener('click', e => {
   const id = e.target.closest('tr').dataset.id; MATRIZ = MATRIZ.filter(r => r.id !== id); tocarMatriz(); renderMatriz();
 });
 $('#btnAddFila').onclick = () => {
-  MATRIZ.push({ id: uid(), tipo: $('#filtroTipo').value || CFG.tipos[0], material: CFG.materiales[0], medida: '1,20 x 1,80', costo: 0 });
+  MATRIZ.push({ id: uid(), tipo: $('#filtroTipo').value || CFG.tipos[0], material: CFG.materiales[0], medida: '1,80 x 1,20', costo: 0 });
   tocarMatriz(); renderMatriz();
   const ins = $$('#tablaMatriz input[data-k="medida"]'); ins.at(-1)?.focus();
 };
@@ -620,7 +649,12 @@ $('#btnPegarOk').onclick = () => {
 };
 
 /* ---------------- Configuración ---------------- */
-function renderConfig() { $$('[data-cfg]').forEach(i => i.value = CFG[i.dataset.cfg] ?? ''); }
+function llenarCondPago(sel, valor) {
+  const ops = CONDICIONES_PAGO.concat(valor && !CONDICIONES_PAGO.includes(valor) ? [valor] : []);
+  sel.innerHTML = '<option value="">Elegir…</option>' + ops.map(o => opt(o, valor)).join('');
+}
+function renderConfig() {
+  llenarCondPago($('[data-cfg="condPago"]'), CFG.condPago); $$('[data-cfg]').forEach(i => i.value = CFG[i.dataset.cfg] ?? ''); }
 $$('[data-cfg]').forEach(i => i.onchange = () => {
   const k = i.dataset.cfg;
   CFG[k] = (k === 'plazo' || k === 'validez') ? (i.value === '' ? '' : num(i.value))

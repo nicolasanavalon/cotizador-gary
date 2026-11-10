@@ -47,7 +47,7 @@
       <div class="card">
         <h2>Condiciones</h2>
         <div class="fields">
-          <label class="wide">Condición de pago<input data-d="condPago"></label>
+          <label class="wide">Condición de pago<select data-d="condPago" data-condpago></select></label>
           <label>Plazo de entrega (días hábiles)
             <span class="dias"><input type="number" min="0" data-d="plazo"><span class="fecha-calc" id="fechaPlazo"></span></span></label>
           <label>Validez de la oferta (días)
@@ -75,8 +75,8 @@
     <div class="card">
       <h2>Despacho Correos de Chile</h2>
       <div class="fields three">
-        <label>Costo para nosotros (neto)<input type="number" min="0" id="despCosto"></label>
-        <label>Cobro al cliente (neto)<input type="number" min="0" id="despCobro"></label>
+        <label>Costo para nosotros (neto)<input data-money inputmode="numeric" id="despCosto"></label>
+        <label>Cobro al cliente (neto)<input data-money inputmode="numeric" id="despCobro"></label>
         <label>Detalle<input id="despNota" placeholder="Ej: Correos de Chile a Punta Arenas"></label>
       </div>
       <p class="hint">Por ahora el monto se ingresa a mano. Cuando tengamos las tarifas de Correos, se va a calcular solo. El despacho entra en el costo y en el margen total.</p>
@@ -120,7 +120,7 @@
     <dialog id="dlgPegar">
       <h2>Pegar desde Excel</h2>
       <p>Copia desde Excel 4 columnas en este orden: <b>Tipo · Material · Medida · Costo neto</b>, y pégalas abajo. Medida como “1,20 x 1,80”.</p>
-      <textarea id="txtPegar" rows="10" placeholder="Banderas normales (uniones) 1/Faz	Poliéster	1,20 x 1,80	15000"></textarea>
+      <textarea id="txtPegar" rows="10" placeholder="Banderas normales (uniones) 1/Faz	Bistrech	1,20 x 1,80	15000"></textarea>
       <label class="check"><input type="checkbox" id="chkReemplazar"> Reemplazar toda la matriz (si no, agrega y actualiza)</label>
       <div class="actions end">
         <button class="btn ghost" id="btnPegarCancelar">Cancelar</button>
@@ -147,7 +147,7 @@
       <div class="card">
         <h2>Valores por defecto</h2>
         <div class="fields">
-          <label>Condición de pago por defecto (vacío = en blanco)<input data-cfg="condPago"></label>
+          <label>Condición de pago por defecto<select data-cfg="condPago" data-condpago></select></label>
           <label>Plazo de entrega por defecto (días hábiles, vacío = en blanco)<input type="number" min="0" data-cfg="plazo"></label>
           <label>Validez por defecto (días, vacío = en blanco)<input type="number" min="0" data-cfg="validez"></label>
           <label>Margen por defecto (%)<input type="number" data-cfg="margenDef"></label>
