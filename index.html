@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="topbar no-print">
-  <div class="brand">Cotizador <b>Gary</b></div>
+  <div class="brand"><img src="logo-compacto.png" alt="Gary"><span>Cotizador</span></div>
   <nav id="tabs">
     <button data-view="cotizar" class="active">Cotizar</button>
     <button data-view="cotizaciones">Cotizaciones</button>
@@ -35,20 +35,23 @@
         <h2>Cliente</h2>
         <div class="fields">
           <label>Nombre o razón social<input data-c="nombre"></label>
-          <label>RUT<input data-c="rut" placeholder="12.345.678-9"></label>
+          <label>RUT<input data-c="rut" data-rut inputmode="text" autocomplete="off"><small class="rut-msg"></small></label>
           <label>Contacto<input data-c="contacto"></label>
           <label>Teléfono<input data-c="telefono"></label>
           <label>Email<input data-c="email" type="email"></label>
           <label>Dirección de despacho<input data-c="direccion"></label>
           <label>Comuna / ciudad<input data-c="comuna"></label>
+          <label>Región<select data-c="region" id="selRegion"></select></label>
         </div>
       </div>
       <div class="card">
         <h2>Condiciones</h2>
         <div class="fields">
-          <label>Condición de pago<input data-d="condPago"></label>
-          <label>Plazo de entrega<input data-d="plazo"></label>
-          <label>Validez de la oferta<input data-d="validez"></label>
+          <label class="wide">Condición de pago<input data-d="condPago"></label>
+          <label>Plazo de entrega (días hábiles)
+            <span class="dias"><input type="number" min="0" data-d="plazo"><span class="fecha-calc" id="fechaPlazo"></span></span></label>
+          <label>Validez de la oferta (días)
+            <span class="dias"><input type="number" min="0" data-d="validez"><span class="fecha-calc" id="fechaValidez"></span></span></label>
           <label class="wide">Observaciones (salen en la cotización)<textarea data-d="obs" rows="3"></textarea></label>
         </div>
       </div>
@@ -134,7 +137,7 @@
         <h2>Datos de la empresa (encabezado de la cotización)</h2>
         <div class="fields">
           <label>Nombre<input data-cfg="empresa"></label>
-          <label>RUT<input data-cfg="rutEmpresa"></label>
+          <label>RUT<input data-cfg="rutEmpresa" data-rut></label>
           <label>Giro<input data-cfg="giro"></label>
           <label>Dirección<input data-cfg="dirEmpresa"></label>
           <label>Teléfono<input data-cfg="fonoEmpresa"></label>
@@ -144,9 +147,9 @@
       <div class="card">
         <h2>Valores por defecto</h2>
         <div class="fields">
-          <label>Condición de pago<input data-cfg="condPago"></label>
-          <label>Plazo de entrega<input data-cfg="plazo"></label>
-          <label>Validez de la oferta<input data-cfg="validez"></label>
+          <label>Condición de pago por defecto (vacío = en blanco)<input data-cfg="condPago"></label>
+          <label>Plazo de entrega por defecto (días hábiles, vacío = en blanco)<input type="number" min="0" data-cfg="plazo"></label>
+          <label>Validez por defecto (días, vacío = en blanco)<input type="number" min="0" data-cfg="validez"></label>
           <label>Margen por defecto (%)<input type="number" data-cfg="margenDef"></label>
           <label>Redondear precio unitario hacia arriba a
             <select data-cfg="redondeo">

@@ -20,13 +20,21 @@ const TIPOS_DEF = [
   'Bandera especial (c/estrellas, Magallanes, Viña, etc.)',
 ];
 const MATERIALES_DEF = ['Raso', 'Poliéster', 'Microperforado', 'Oxford', 'Raquelado'];
+const REGIONES = ['Arica y Parinacota', 'Tarapacá', 'Antofagasta', 'Atacama', 'Coquimbo', 'Valparaíso',
+  'Metropolitana', "O'Higgins", 'Maule', 'Ñuble', 'Biobío', 'La Araucanía', 'Los Ríos', 'Los Lagos',
+  'Aysén', 'Magallanes'];
+/* Feriados nacionales (para contar días hábiles). */
+const FERIADOS = new Set([
+  '2026-01-01', '2026-04-03', '2026-04-04', '2026-05-01', '2026-05-21', '2026-06-21', '2026-06-29', '2026-07-16',
+  '2026-08-15', '2026-09-18', '2026-09-19', '2026-10-12', '2026-10-31', '2026-11-01', '2026-12-08', '2026-12-25',
+  '2027-01-01', '2027-03-26', '2027-03-27', '2027-05-01', '2027-05-21', '2027-06-21', '2027-06-28', '2027-07-16',
+  '2027-08-15', '2027-09-18', '2027-09-19', '2027-10-11', '2027-10-31', '2027-11-01', '2027-12-08', '2027-12-25',
+]);
 
 const CONFIG_DEF = {
   empresa: 'Taller Gary', rutEmpresa: '', giro: 'Confección de banderas', dirEmpresa: '',
   fonoEmpresa: '', mailEmpresa: '',
-  condPago: '50% al aceptar la cotización, 50% contra entrega',
-  plazo: '10 días hábiles desde la aprobación',
-  validez: '15 días',
+  condPago: '', plazo: '', validez: '',
   margenDef: 40, redondeo: 100, nextCot: 1, nextOt: 1,
   tipos: TIPOS_DEF, materiales: MATERIALES_DEF,
 };
@@ -65,6 +73,43 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const num = v => { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; };
 const hoy = () => new Date().toISOString().slice(0, 10);
 const fechaCL = iso => iso ? iso.slice(0, 10).split('-').reverse().join('-') : '';
+/* RUT: formatea a 12.345.678-9 y valida dígito verificador */
+function limpiaRut(v) { return String(v || '').toUpperCase().replace(/[^0-9K]/g, '').replace(/K(?=.)/g, ''); }
+function formatRut(v) {
+  const r = limpiaRut(v); if (r.length < 2) return r;
+  const cuerpo = r.slice(0, -1), dv = r.slice(-1);
+  return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+}
+function rutValido(v) {
+  const r = limpiaRut(v); if (r.length < 2) return false;
+  const cuerpo = r.slice(0, -1), dv = r.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let s = 0, m = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) { s += +cuerpo[i] * m; m = m === 7 ? 2 : m + 1; }
+  const esperado = 11 - (s % 11);
+  return dv === (esperado === 11 ? '0' : esperado === 10 ? 'K' : String(esperado));
+}
+/* Fechas */
+const isoDe = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const fechaDe = iso => { const [y, m, d] = String(iso || hoy()).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+function sumarDiasHabiles(iso, n) {
+  const d = fechaDe(iso); let k = 0;
+  while (k < n) { d.setDate(d.getDate() + 1); const dw = d.getDay(); if (dw !== 0 && dw !== 6 && !FERIADOS.has(isoDe(d))) k++; }
+  return isoDe(d);
+}
+function sumarDias(iso, n) { const d = fechaDe(iso); d.setDate(d.getDate() + n); return isoDe(d); }
+const DIAS_SEM = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const fechaLarga = iso => `${DIAS_SEM[fechaDe(iso).getDay()]} ${fechaCL(iso)}`;
+function esNumero(v) { return v !== '' && v != null && isFinite(+v); }
+function textoPlazo(c, desde) {
+  if (!esNumero(c.plazo)) return c.plazo || '';
+  return `${+c.plazo} días hábiles (${fechaCL(sumarDiasHabiles(desde || c.fecha, +c.plazo))})`;
+}
+function textoValidez(c) {
+  if (!esNumero(c.validez)) return c.validez || '';
+  return `${+c.validez} días (hasta el ${fechaCL(sumarDias(c.fecha, +c.validez))})`;
+}
+
 function areaDe(medida) {
   const m = String(medida).replace(/,/g, '.').match(/([\d.]+)\s*[x×*]\s*([\d.]+)/i);
   return m ? parseFloat(m[1]) * parseFloat(m[2]) : 0;
@@ -90,12 +135,21 @@ const Store = {
 };
 
 let CFG = Object.assign({}, CONFIG_DEF, Store.get('config', {}));
+// Migración: las condiciones antiguas eran texto; ahora plazo/validez son números y por defecto van en blanco.
+if (CFG.condPago === '50% al aceptar la cotización, 50% contra entrega') CFG.condPago = '';
+if (!esNumero(CFG.plazo)) CFG.plazo = '';
+if (!esNumero(CFG.validez)) CFG.validez = '';
 let MATRIZ = Store.get('matriz', null);
 let MATRIZ_EJEMPLO = Store.get('matrizEjemplo', true);
 if (!MATRIZ) { MATRIZ = matrizEjemplo(); MATRIZ_EJEMPLO = true; Store.set('matriz', MATRIZ); Store.set('matrizEjemplo', true); }
 let COTS = Store.get('cotizaciones', []);
 let OTS = Store.get('ots', []);
 let D = Store.get('borrador', null) || nuevoBorrador();
+if (!D.id) {
+  if (D.condPago === '50% al aceptar la cotización, 50% contra entrega') D.condPago = '';
+  if (!esNumero(D.plazo)) D.plazo = '';
+  if (!esNumero(D.validez)) D.validez = '';
+}
 
 const saveCfg = () => Store.set('config', CFG);
 const saveMatriz = () => { Store.set('matriz', MATRIZ); Store.set('matrizEjemplo', MATRIZ_EJEMPLO); };
@@ -106,7 +160,7 @@ const saveDraft = () => Store.set('borrador', D);
 function nuevoBorrador() {
   return {
     id: null, numero: null, fecha: hoy(),
-    cliente: { nombre: '', rut: '', contacto: '', telefono: '', email: '', direccion: '', comuna: '' },
+    cliente: { nombre: '', rut: '', contacto: '', telefono: '', email: '', direccion: '', comuna: '', region: '' },
     condPago: CFG.condPago, plazo: CFG.plazo, validez: CFG.validez, obs: '',
     items: [nuevoItem()],
     despacho: { costo: 0, cobro: 0, nota: '' },
@@ -167,12 +221,18 @@ function chipsHtml(valor, attr) {
 function renderEditor() {
   $('#cotTitulo').textContent = D.numero ? `Cotización N° ${D.numero}` : 'Nueva cotización';
   $$('[data-c]').forEach(i => i.value = D.cliente[i.dataset.c] || '');
+  marcarRut($('[data-c="rut"]'));
   $$('[data-d]').forEach(i => i.value = D[i.dataset.d] || '');
   $('#despCosto').value = D.despacho.costo || '';
   $('#despCobro').value = D.despacho.cobro || '';
   $('#despNota').value = D.despacho.nota || '';
+  renderFechas();
   renderChipsGlobal();
   renderItems();
+}
+function renderFechas() {
+  $('#fechaPlazo').textContent = esNumero(D.plazo) ? '→ ' + fechaLarga(sumarDiasHabiles(D.fecha, +D.plazo)) : '';
+  $('#fechaValidez').textContent = esNumero(D.validez) ? '→ hasta ' + fechaLarga(sumarDias(D.fecha, +D.validez)) : '';
 }
 function renderChipsGlobal() {
   const ms = [...new Set(D.items.map(i => +i.margen))];
@@ -299,7 +359,26 @@ $('#chipsGlobal').addEventListener('change', e => {
 $('#btnAddItem').onclick = () => { D.items.push(nuevoItem()); renderItems(); };
 $('#btnAddLibre').onclick = () => { D.items.push(nuevoItem(true)); renderItems(); };
 $$('[data-c]').forEach(i => i.oninput = () => { D.cliente[i.dataset.c] = i.value; saveDraft(); });
-$$('[data-d]').forEach(i => i.oninput = () => { D[i.dataset.d] = i.value; saveDraft(); });
+$$('[data-d]').forEach(i => i.oninput = () => { D[i.dataset.d] = i.value; saveDraft(); renderFechas(); });
+$('#selRegion').innerHTML = '<option value="">Elegir…</option>' + REGIONES.map(r => `<option>${esc(r)}</option>`).join('');
+$('#selRegion').onchange = e => { D.cliente.region = e.target.value; saveDraft(); };
+
+/* RUT: se formatea solo mientras se escribe (antes que los demás handlers) */
+function marcarRut(inp) {
+  const msg = inp.parentElement.querySelector('.rut-msg'); if (!msg) return;
+  const v = inp.value; const ok = rutValido(v);
+  msg.textContent = !v || limpiaRut(v).length < 8 ? '' : ok ? '✓ RUT válido' : '✗ Dígito verificador no calza';
+  msg.className = 'rut-msg ' + (ok ? 'ok' : 'bad');
+}
+document.addEventListener('input', e => {
+  if (!e.target.matches('[data-rut]')) return;
+  const inp = e.target, antes = inp.value, pos = inp.selectionStart;
+  const sig = limpiaRut(antes.slice(0, pos)).length;
+  inp.value = formatRut(antes);
+  let p = 0, k = 0; while (p < inp.value.length && k < sig) { if (/[0-9K]/.test(inp.value[p])) k++; p++; }
+  try { inp.setSelectionRange(p, p); } catch (_) {}
+  marcarRut(inp);
+}, true);
 $('#despCosto').oninput = e => {
   const nuevo = num(e.target.value);
   if (+D.despacho.cobro === +D.despacho.costo) { D.despacho.cobro = nuevo; $('#despCobro').value = nuevo || ''; }
@@ -348,7 +427,7 @@ $('#btnPdf').onclick = () => { const c = guardarCotizacion(); if (c) imprimirCot
 /* ---------------- Documentos imprimibles ---------------- */
 function encabezado(titulo, numero, fecha) {
   return `<div class="doc-head">
-    <div class="doc-emp"><b>${esc(CFG.empresa)}</b>
+    <div class="doc-emp"><img class="doc-logo" src="logo.png" alt="${esc(CFG.empresa)}"><b>${esc(CFG.empresa)}</b>
       ${CFG.giro ? `<div>${esc(CFG.giro)}</div>` : ''}
       ${CFG.rutEmpresa ? `<div>RUT ${esc(CFG.rutEmpresa)}</div>` : ''}
       ${CFG.dirEmpresa ? `<div>${esc(CFG.dirEmpresa)}</div>` : ''}
@@ -362,11 +441,12 @@ function bloqueCliente(c) {
     <div><span>RUT:</span> ${esc(c.rut)}</div>
     <div><span>Contacto:</span> ${esc(c.contacto)}</div>
     <div><span>Teléfono / email:</span> ${esc([c.telefono, c.email].filter(Boolean).join(' · '))}</div>
-    <div style="grid-column:1/-1"><span>Dirección de despacho:</span> ${esc([c.direccion, c.comuna].filter(Boolean).join(', '))}</div>
+    <div style="grid-column:1/-1"><span>Dirección de despacho:</span> ${esc([c.direccion, c.comuna, c.region ? 'Región ' + c.region : ''].filter(Boolean).join(', '))}</div>
   </div>`;
 }
-function imprimir(html, titulo) {
+async function imprimir(html, titulo) {
   $('#print').innerHTML = html;
+  await Promise.all($$('#print img').map(img => img.complete ? null : new Promise(r => { img.onload = img.onerror = r; })));
   const prev = document.title; document.title = titulo;
   setTimeout(() => { window.print(); document.title = prev; }, 50);
 }
@@ -388,8 +468,8 @@ function imprimirCotizacion(c) {
       <tr class="final"><td>TOTAL</td><td class="num">${clp(t.bruto)}</td></tr></table>
     <div class="cond">
       ${c.condPago ? `<p><b>Condición de pago:</b> ${esc(c.condPago)}</p>` : ''}
-      ${c.plazo ? `<p><b>Plazo de entrega:</b> ${esc(c.plazo)}</p>` : ''}
-      ${c.validez ? `<p><b>Validez de la oferta:</b> ${esc(c.validez)}</p>` : ''}
+      ${textoPlazo(c) ? `<p><b>Plazo de entrega:</b> ${esc(textoPlazo(c))}</p>` : ''}
+      ${textoValidez(c) ? `<p><b>Validez de la oferta:</b> ${esc(textoValidez(c))}</p>` : ''}
       ${c.obs ? `<p><b>Observaciones:</b> ${esc(c.obs).replace(/\n/g, '<br>')}</p>` : ''}
     </div></div>`, `Cotización ${c.numero} - ${c.cliente.nombre}`);
 }
@@ -402,7 +482,7 @@ function imprimirOt(o) {
     ${bloqueCliente(o.cliente)}
     <div class="doc-meta">
       <div><span>Cotización:</span> N° ${esc(o.cotNumero)}</div>
-      <div><span>Plazo de entrega:</span> ${esc(o.plazo)}</div>
+      <div><span>Fecha de entrega:</span> <b>${esc(textoPlazo({ plazo: o.plazo, fecha: o.fecha }))}</b></div>
       ${o.despacho ? `<div style="grid-column:1/-1"><span>Despacho:</span> ${esc(o.despacho)}</div>` : ''}
     </div>
     <table><thead><tr><th class="num">#</th><th class="num">Cant.</th><th>Tipo / producto</th><th>Material</th><th>Medida (m)</th><th>Detalle</th><th>Listo</th></tr></thead>
@@ -451,7 +531,7 @@ $('#tablaCot').addEventListener('click', e => {
     if (!ot) {
       ot = { id: uid(), numero: +CFG.nextOt || 1, fecha: hoy(), cotId: c.id, cotNumero: c.numero,
         cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
-        despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
+        despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
         items: c.items.map(({ libre, tipo, material, medida, descripcion, cantidad, obs }) => ({ libre, tipo, material, medida, descripcion, cantidad, obs })),
         estado: 'Pendiente' };
       CFG.nextOt = ot.numero + 1; saveCfg();
@@ -542,7 +622,10 @@ $('#btnPegarOk').onclick = () => {
 /* ---------------- Configuración ---------------- */
 function renderConfig() { $$('[data-cfg]').forEach(i => i.value = CFG[i.dataset.cfg] ?? ''); }
 $$('[data-cfg]').forEach(i => i.onchange = () => {
-  const k = i.dataset.cfg; CFG[k] = i.type === 'number' || k === 'redondeo' ? num(i.value) : i.value; saveCfg();
+  const k = i.dataset.cfg;
+  CFG[k] = (k === 'plazo' || k === 'validez') ? (i.value === '' ? '' : num(i.value))
+    : i.type === 'number' || k === 'redondeo' ? num(i.value) : i.value;
+  saveCfg();
   if (k === 'redondeo') recalc();
   toast('Guardado');
 });
