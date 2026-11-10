@@ -16,6 +16,7 @@
     <button data-view="matriz">Matriz de costos</button>
     <button data-view="config">Configuración</button>
   </nav>
+  <span id="nube" class="nube"></span>
 </header>
 
 <main class="no-print">
@@ -166,7 +167,7 @@
     </div>
     <div class="card">
       <h2>Respaldo</h2>
-      <p class="hint">Por ahora los datos quedan guardados en este navegador. Pronto se van a guardar en la nube y van a ser compartidos entre todos.</p>
+      <p class="hint" id="txtRespaldo">Descarga una copia de todos los datos (cotizaciones, OT, matriz y configuración).</p>
       <div class="actions">
         <button class="btn" id="btnExport">Descargar respaldo</button>
         <label class="btn">Restaurar respaldo<input type="file" id="fileImport" accept=".json" hidden></label>
@@ -179,6 +180,16 @@
 <div id="print" class="print-only"></div>
 
 <div id="toast" class="no-print"></div>
+
+<dialog id="dlgClave" class="no-print">
+  <h2>Clave del taller</h2>
+  <p>Escribe la clave para conectarte. Se pide una sola vez en cada celular o computador.</p>
+  <form method="dialog" id="formClave">
+    <input id="txtClave" type="password" autocomplete="current-password" autocapitalize="off" required>
+    <p class="warn-txt" id="claveError"></p>
+    <div class="actions end"><button class="btn primary" type="submit">Entrar</button></div>
+  </form>
+</dialog>
 
 <script src="app.js"></script>
 </body>

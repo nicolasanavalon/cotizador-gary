@@ -174,6 +174,105 @@ const saveCots = () => Store.set('cotizaciones', COTS);
 const saveOts = () => Store.set('ots', OTS);
 const saveDraft = () => Store.set('borrador', D);
 
+/* ---------------- Nube (Google Sheets vía Apps Script) ---------------- */
+const NUBE_URL = window.__NUBE_URL__ || '';   // URL del servidor; vacío = solo este navegador
+const nubeActiva = () => !!NUBE_URL;
+let CLAVE = Store.get('clave', '');
+function estadoNube(txt, tipo) { const el = $('#nube'); if (el) { el.textContent = txt; el.className = 'nube ' + tipo; } }
+function pedirClave(error) {
+  return new Promise(res => {
+    const dlg = $('#dlgClave');
+    $('#claveError').textContent = error ? 'Clave incorrecta. Intenta de nuevo.' : '';
+    $('#txtClave').value = '';
+    dlg.oncancel = e => e.preventDefault();          // no se puede cerrar sin clave
+    $('#formClave').onsubmit = () => {
+      CLAVE = $('#txtClave').value.trim(); Store.set('clave', CLAVE); setTimeout(res, 0);
+    };
+    if (!dlg.open) dlg.showModal();
+    setTimeout(() => $('#txtClave').focus(), 50);
+  });
+}
+let cambios = 0;   // cuenta los guardados; sirve para descartar lecturas que quedaron viejas
+async function api(accion, datos = {}) {
+  if (!CLAVE) await pedirClave(false);
+  if (accion !== 'cargar') cambios++;
+  estadoNube(accion === 'cargar' ? 'Actualizando…' : 'Guardando…', 'sync');
+  let r;
+  try {
+    r = await fetch(NUBE_URL, { method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ ...datos, clave: CLAVE, accion }) });
+  } catch (e) { estadoNube('Sin conexión', 'off'); throw new Error('sin conexión a internet'); }
+  let j;
+  try { j = await r.json(); } catch (e) { estadoNube('Error', 'off'); throw new Error('respuesta inválida del servidor'); }
+  if (j.error === 'clave') { estadoNube('Falta clave', 'off'); await pedirClave(true); return api(accion, datos); }
+  if (!j.ok) { estadoNube('Error', 'off'); throw new Error(j.error || 'error del servidor'); }
+  estadoNube('● En línea', 'on');
+  return j;
+}
+let subiendoMatriz = null, timerMatriz = null, cargando = null;
+/* Trae todo desde la nube y actualiza la copia local. */
+function cargarNube() {
+  if (!nubeActiva()) return Promise.resolve(false);
+  if (cargando) return cargando;
+  cargando = (async () => {
+    try {
+      const antes = cambios;
+      const j = await api('cargar');
+      if (timerMatriz || subiendoMatriz) return false;   // hay cambios de matriz sin subir: no pisarlos
+      if (cambios !== antes) { setTimeout(actualizar, 300); return false; }   // llegó vieja: pedir de nuevo
+      const cfg = j.config || {};
+      if (!Object.keys(cfg).length) {
+        // Primera conexión: la nube está vacía, se sube la configuración y la matriz de este equipo.
+        Object.assign(CFG, { nextCot: 1, nextOt: 1 });     // la numeración en la nube parte de cero
+        await api('guardarConfig', { config: CFG });
+      } else {
+        CFG = Object.assign({}, CONFIG_DEF, cfg);
+        MATRIZ_EJEMPLO = !!cfg.matrizEjemplo;
+      }
+      if (!(j.matriz || []).length) await api('guardarMatriz', { matriz: MATRIZ, ejemplo: MATRIZ_EJEMPLO });
+      else MATRIZ = j.matriz.map(r => ({ ...r, medida: normMedida(r.medida) }));
+      COTS = (j.cotizaciones || []).sort((a, b) => b.numero - a.numero);
+      OTS = (j.ots || []).sort((a, b) => b.numero - a.numero);
+      Store.set('config', CFG); saveMatriz(); saveCots(); saveOts();
+      return true;
+    } catch (e) { toast('No se pudo actualizar: ' + e.message); return false; }
+    finally { cargando = null; }
+  })();
+  return cargando;
+}
+function subirMatriz() {
+  if (!nubeActiva()) return;
+  clearTimeout(timerMatriz);
+  timerMatriz = setTimeout(async () => {
+    timerMatriz = null;
+    const p = subiendoMatriz = api('guardarMatriz', { matriz: MATRIZ, ejemplo: MATRIZ_EJEMPLO });
+    try { await p; } catch (e) { toast('No se pudo guardar la matriz: ' + e.message); }
+    finally { if (subiendoMatriz === p) subiendoMatriz = null; }
+  }, 1200);
+}
+async function subirConfig(parcial) {
+  if (!nubeActiva()) return;
+  await api('guardarConfig', { config: parcial });
+}
+const vistaActual = () => $('.view.active')?.id.replace('view-', '');
+function refrescarVista() {
+  const v = vistaActual();
+  if (v === 'cotizaciones') renderCotizaciones();
+  if (v === 'ots') renderOts();
+  if (v === 'matriz' && !$('#tablaMatriz').contains(document.activeElement)) renderMatriz();
+  if (v === 'config' && !$('#view-config').contains(document.activeElement)) renderConfig();
+  if (v === 'cotizar' && !$('#items').contains(document.activeElement)) renderItems();
+}
+async function actualizar() { if (await cargarNube()) refrescarVista(); }
+function conBoton(btn, fn) {
+  return async (...a) => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try { return await fn(...a); } finally { btn.disabled = false; }
+  };
+}
+
 function nuevoBorrador() {
   return {
     id: null, numero: null, fecha: hoy(),
@@ -224,6 +323,7 @@ function mostrar(view) {
   if (view === 'matriz') renderMatriz();
   if (view === 'config') renderConfig();
   window.scrollTo(0, 0);
+  if (view !== 'cotizar') actualizar();
 }
 $$('#tabs button').forEach(b => b.onclick = () => mostrar(b.dataset.view));
 
@@ -429,29 +529,33 @@ function validar() {
   if (sinPrecio) { toast('Hay un producto sin costo: revisa tipo, material y medida'); return false; }
   return true;
 }
-function guardarCotizacion() {
+async function guardarCotizacion() {
   if (!validar()) return null;
   const snap = JSON.parse(JSON.stringify(D));
   snap.items = snap.items.filter(i => +i.cantidad > 0);
   snap.totales = calcTotales(snap);
   snap.actualizado = new Date().toISOString();
   if (!D.id) {
-    snap.id = uid(); snap.numero = +CFG.nextCot || 1; snap.estado = 'Pendiente'; snap.fecha = hoy();
-    CFG.nextCot = snap.numero + 1; saveCfg();
-    COTS.unshift(snap);
+    Object.assign(snap, { id: uid(), numero: null, estado: 'Pendiente', fecha: hoy() });
   } else {
-    const i = COTS.findIndex(c => c.id === D.id);
-    snap.estado = COTS[i]?.estado || 'Pendiente';
-    if (i >= 0) COTS[i] = snap; else COTS.unshift(snap);
+    const prev = COTS.find(c => c.id === D.id);
+    snap.estado = prev?.estado || D.estado || 'Pendiente';
+    if (prev?.otNumero) snap.otNumero = prev.otNumero;
   }
+  try {
+    if (nubeActiva()) Object.assign(snap, (await api('guardarCot', { cot: snap })).cot);
+    else if (!snap.numero) { snap.numero = +CFG.nextCot || 1; CFG.nextCot = snap.numero + 1; saveCfg(); }
+  } catch (e) { toast('No se pudo guardar: ' + e.message); return null; }
+  const i = COTS.findIndex(c => c.id === snap.id);
+  if (i >= 0) COTS[i] = snap; else COTS.unshift(snap);
   saveCots();
   D = JSON.parse(JSON.stringify(snap)); saveDraft();
   renderEditor();
   toast(`Cotización N° ${snap.numero} guardada`);
   return snap;
 }
-$('#btnGuardar').onclick = guardarCotizacion;
-$('#btnPdf').onclick = () => { const c = guardarCotizacion(); if (c) imprimirCotizacion(c); };
+$('#btnGuardar').onclick = conBoton($('#btnGuardar'), guardarCotizacion);
+$('#btnPdf').onclick = conBoton($('#btnPdf'), async () => { const c = await guardarCotizacion(); if (c) imprimirCotizacion(c); });
 
 /* ---------------- Documentos imprimibles ---------------- */
 function encabezado(titulo, numero, fecha) {
@@ -540,8 +644,16 @@ function renderCotizaciones() {
         <button class="btn sm ghost danger" data-a="borrar">Borrar</button></td></tr>`; }).join('') + '</tbody>';
 }
 $('#buscaCot').oninput = renderCotizaciones;
-$('#tablaCot').addEventListener('click', e => {
+$('#tablaCot').addEventListener('click', async e => {
   const a = e.target.dataset.a; if (!a) return;
+  if (['rechazar', 'borrar', 'aprobar'].includes(a)) {
+    if (e.target.disabled) return;
+    e.target.disabled = true;
+    try { await accionCot(a, e.target.closest('tr').dataset.id); }
+    catch (err) { toast('No se pudo completar: ' + err.message); }
+    finally { e.target.disabled = false; }
+    return;
+  }
   const c = COTS.find(x => x.id === e.target.closest('tr').dataset.id); if (!c) return;
   if (a === 'abrir') { D = JSON.parse(JSON.stringify(c)); saveDraft(); renderEditor(); mostrar('cotizar'); }
   if (a === 'pdf') imprimirCotizacion(c);
@@ -549,27 +661,42 @@ $('#tablaCot').addEventListener('click', e => {
     D = JSON.parse(JSON.stringify(c)); Object.assign(D, { id: null, numero: null, fecha: hoy() });
     D.items.forEach(i => i.id = uid()); saveDraft(); renderEditor(); mostrar('cotizar'); toast('Copia lista para editar');
   }
-  if (a === 'rechazar') { c.estado = 'Rechazada'; saveCots(); renderCotizaciones(); }
+});
+async function accionCot(a, id) {
+  const c = COTS.find(x => x.id === id); if (!c) return;
+  if (a === 'rechazar') {
+    const cot = { ...c, estado: 'Rechazada' };
+    if (nubeActiva()) await api('guardarCot', { cot });
+    c.estado = 'Rechazada';
+  }
   if (a === 'borrar') {
     if (!confirm(`¿Borrar la cotización N° ${c.numero}? No se puede deshacer.`)) return;
-    COTS = COTS.filter(x => x !== c); saveCots(); renderCotizaciones();
+    if (nubeActiva()) await api('borrarCot', { id: c.id });
+    COTS = COTS.filter(x => x !== c);
   }
   if (a === 'aprobar') {
-    c.estado = 'Aprobada';
     let ot = OTS.find(o => o.cotId === c.id);
     if (!ot) {
-      ot = { id: uid(), numero: +CFG.nextOt || 1, fecha: hoy(), cotId: c.id, cotNumero: c.numero,
+      ot = { id: uid(), numero: null, fecha: hoy(), cotId: c.id, cotNumero: c.numero,
         cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
         despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
         items: c.items.map(({ libre, tipo, material, medida, descripcion, cantidad, obs }) => ({ libre, tipo, material, medida, descripcion, cantidad, obs })),
         estado: 'Pendiente' };
-      CFG.nextOt = ot.numero + 1; saveCfg();
-      OTS.unshift(ot); saveOts();
     }
-    saveCots(); renderCotizaciones();
+    if (nubeActiva()) {
+      const j = await api('aprobar', { id: c.id, ot });
+      Object.assign(c, j.cot); ot = j.ot;
+    } else {
+      if (!ot.numero) { ot.numero = +CFG.nextOt || 1; CFG.nextOt = ot.numero + 1; saveCfg(); }
+      c.estado = 'Aprobada'; c.otNumero = ot.numero;
+    }
+    const k = OTS.findIndex(o => o.id === ot.id);
+    if (k >= 0) OTS[k] = ot; else OTS.unshift(ot);
+    saveOts();
     toast(`Cotización ${c.numero} aprobada → OT N° ${ot.numero} creada`);
   }
-});
+  saveCots(); renderCotizaciones();
+}
 
 /* ---------------- Órdenes de trabajo ---------------- */
 const ESTADOS_OT = ['Pendiente', 'En producción', 'Terminada'];
@@ -582,14 +709,21 @@ function renderOts() {
       <td class="acc"><button class="btn sm" data-a="pdf">Imprimir / PDF</button>
         <button class="btn sm ghost danger" data-a="borrar">Borrar</button></td></tr>`).join('') + '</tbody>';
 }
-$('#tablaOt').addEventListener('click', e => {
+$('#tablaOt').addEventListener('click', async e => {
   const a = e.target.dataset.a; const o = OTS.find(x => x.id === e.target.closest('tr')?.dataset.id); if (!o) return;
   if (a === 'pdf') imprimirOt(o);
-  if (a === 'borrar' && confirm(`¿Borrar la OT N° ${o.numero}?`)) { OTS = OTS.filter(x => x !== o); saveOts(); renderOts(); }
+  if (a === 'borrar' && confirm(`¿Borrar la OT N° ${o.numero}?`)) {
+    try { if (nubeActiva()) await api('borrarOt', { id: o.id }); }
+    catch (err) { toast('No se pudo borrar: ' + err.message); return; }
+    OTS = OTS.filter(x => x !== o); saveOts(); renderOts();
+  }
 });
-$('#tablaOt').addEventListener('change', e => {
+$('#tablaOt').addEventListener('change', async e => {
   if (e.target.dataset.a !== 'estado') return;
-  const o = OTS.find(x => x.id === e.target.closest('tr').dataset.id); o.estado = e.target.value; saveOts();
+  const o = OTS.find(x => x.id === e.target.closest('tr').dataset.id); const antes = o.estado;
+  o.estado = e.target.value;
+  try { if (nubeActiva()) await api('guardarOt', { ot: o }); saveOts(); toast(`OT ${o.numero}: ${o.estado}`); }
+  catch (err) { o.estado = antes; e.target.value = antes; toast('No se pudo guardar: ' + err.message); }
 });
 
 /* ---------------- Matriz de costos ---------------- */
@@ -610,7 +744,7 @@ function renderMatriz() {
       '<tr><td colspan="5" class="empty">No hay filas para este tipo.</td></tr>') + '</tbody>';
 }
 $('#filtroTipo').onchange = renderMatriz;
-function tocarMatriz() { MATRIZ_EJEMPLO = false; saveMatriz(); $('#avisoEjemplo').style.display = 'none'; }
+function tocarMatriz() { MATRIZ_EJEMPLO = false; saveMatriz(); $('#avisoEjemplo').style.display = 'none'; subirMatriz(); }
 $('#tablaMatriz').addEventListener('change', e => {
   const k = e.target.dataset.k; const r = MATRIZ.find(x => x.id === e.target.closest('tr')?.dataset.id); if (!k || !r) return;
   r[k] = k === 'costo' ? num(e.target.value) : k === 'medida' ? normMedida(e.target.value) : e.target.value;
@@ -645,6 +779,7 @@ $('#btnPegarOk').onclick = () => {
     if (!CFG.materiales.includes(n.material)) CFG.materiales.push(n.material);
   }
   saveCfg(); tocarMatriz(); $('#dlgPegar').close(); renderMatriz();
+  subirConfig({ tipos: CFG.tipos, materiales: CFG.materiales }).catch(err => toast('No se pudo guardar: ' + err.message));
   toast(`${nuevas.length} filas importadas` + (malas.length ? ` · ${malas.length} ignoradas` : ''));
 };
 
@@ -661,7 +796,8 @@ $$('[data-cfg]').forEach(i => i.onchange = () => {
     : i.type === 'number' || k === 'redondeo' ? num(i.value) : i.value;
   saveCfg();
   if (k === 'redondeo') recalc();
-  toast('Guardado');
+  subirConfig({ [k]: CFG[k] }).then(() => toast('Guardado'), err => toast('No se pudo guardar: ' + err.message));
+  if (!nubeActiva()) toast('Guardado');
 });
 $('#btnExport').onclick = () => {
   const blob = new Blob([JSON.stringify({ config: CFG, matriz: MATRIZ, matrizEjemplo: MATRIZ_EJEMPLO, cotizaciones: COTS, ots: OTS }, null, 1)], { type: 'application/json' });
@@ -671,9 +807,10 @@ $('#fileImport').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const j = JSON.parse(await f.text());
-    if (!confirm('Esto reemplaza todos los datos de este navegador por los del respaldo. ¿Seguir?')) return;
+    if (!confirm('Esto REEMPLAZA todos los datos (de todos los usuarios) por los del respaldo. ¿Seguir?')) return;
     CFG = Object.assign({}, CONFIG_DEF, j.config); MATRIZ = j.matriz || []; MATRIZ_EJEMPLO = !!j.matrizEjemplo;
     COTS = j.cotizaciones || []; OTS = j.ots || [];
+    if (nubeActiva()) await api('restaurar', { config: CFG, matriz: MATRIZ, ejemplo: MATRIZ_EJEMPLO, cotizaciones: COTS, ots: OTS });
     saveCfg(); saveMatriz(); saveCots(); saveOts(); renderConfig(); toast('Respaldo restaurado');
   } catch (err) { alert('El archivo no es un respaldo válido.'); }
   e.target.value = '';
@@ -681,3 +818,11 @@ $('#fileImport').onchange = async e => {
 
 /* ---------------- Inicio ---------------- */
 renderEditor();
+if (nubeActiva()) {
+  actualizar();
+  // Mantener sincronizado: al volver a la pestaña y cada 60 s.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) actualizar(); });
+  setInterval(() => { if (!document.hidden) actualizar(); }, 60000);
+} else {
+  estadoNube('Solo este equipo', 'local');
+}
