@@ -13,6 +13,7 @@ const HOJAS = {
   OT: ['N°', 'Fecha', 'Cliente', 'Cotización', 'Estado', 'id', 'datos'],
   Matriz: ['Tipo', 'Material', 'Medida', 'Costo neto', 'id'],
   Config: ['clave', 'valor'],
+  Imagenes: ['id', 'fecha', 'partes'],   // la imagen va repartida en columnas siguientes (máx. 50.000 caracteres por celda)
 };
 
 /* ---------------- Entrada ---------------- */
@@ -99,6 +100,32 @@ const ACCIONES = {
   },
 
   borrarOt: b => { borrarFila_('OT', b.id); return {}; },
+
+  // Imagen de un producto (JPEG en base64), repartida en trozos de 45.000 caracteres.
+  guardarImagen: b => {
+    if (!b.id || !b.data) throw new Error('Imagen inválida');
+    const partes = [];
+    for (let i = 0; i < b.data.length; i += 45000) partes.push(b.data.slice(i, i + 45000));
+    const fila = [b.id, new Date().toISOString().slice(0, 10), partes.length].concat(partes);
+    const sh = hoja_('Imagenes');
+    let r = filaDe_('Imagenes', b.id);
+    if (r < 0) r = sh.getLastRow() + 1;
+    const rg = sh.getRange(r, 1, 1, fila.length);
+    rg.setNumberFormat('@');
+    rg.setValues([fila]);
+    return {};
+  },
+
+  leerImagenes: b => {
+    const sh = hoja_('Imagenes'); const n = sh.getLastRow(); const imagenes = {};
+    if (n < 2) return { imagenes };
+    const buscadas = new Set((b.ids || []).map(String));
+    sh.getRange(2, 1, n - 1, 3).getValues().forEach((r, i) => {
+      const id = String(r[0]), k = Number(r[2]) || 0;
+      if (buscadas.has(id) && k > 0) imagenes[id] = sh.getRange(i + 2, 4, 1, k).getValues()[0].join('');
+    });
+    return { imagenes };
+  },
 
   // Reemplaza todo con un respaldo.
   restaurar: b => {

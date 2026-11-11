@@ -256,6 +256,57 @@ async function subirConfig(parcial) {
   if (!nubeActiva()) return;
   await api('guardarConfig', { config: parcial });
 }
+/* ---------------- Imágenes de productos ---------------- */
+const IMGS = new Map();
+function imgDe(id) {
+  if (!id) return null;
+  if (IMGS.has(id)) return IMGS.get(id);
+  try { const v = localStorage.getItem('cg_img_' + id); if (v) { IMGS.set(id, v); return v; } } catch (_) {}
+  return null;
+}
+function guardarImgLocal(id, data) { IMGS.set(id, data); try { localStorage.setItem('cg_img_' + id, data); } catch (_) {} }
+/* Trae desde la nube las imágenes que este equipo todavía no tiene. */
+async function asegurarImagenes(items) {
+  const faltan = [...new Set((items || []).map(i => i.imagen).filter(Boolean))].filter(id => !imgDe(id));
+  if (!faltan.length || !nubeActiva()) return false;
+  try {
+    const j = await api('leerImagenes', { ids: faltan });
+    Object.entries(j.imagenes || {}).forEach(([id, data]) => guardarImgLocal(id, data));
+    return true;
+  } catch (e) { return false; }
+}
+/* Achica la foto (máx. 900 px, JPEG) para que pese poco. */
+function comprimirImagen(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const max = 900, k = Math.min(1, max / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+      g.drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      res(cv.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('no se pudo leer la imagen')); };
+    img.src = url;
+  });
+}
+async function subirImagen(it, file) {
+  let data;
+  try { data = await comprimirImagen(file); } catch (e) { toast('No se pudo leer la imagen'); return; }
+  const id = 'img' + uid();
+  guardarImgLocal(id, data);
+  it.imagen = id; renderItems();
+  if (nubeActiva()) {
+    try { await api('guardarImagen', { id, data }); toast('Imagen guardada'); }
+    catch (e) {
+      toast(/desconocida/i.test(e.message) ? 'Falta actualizar el servidor para guardar imágenes en la nube (la imagen quedó solo en este equipo)'
+        : 'No se pudo subir la imagen: ' + e.message);
+    }
+  }
+}
+
 const vistaActual = () => $('.view.active')?.id.replace('view-', '');
 function refrescarVista() {
   const v = vistaActual();
@@ -476,14 +527,22 @@ function renderItems() {
       </div>
       ${it.tipo && !mats.length ? '<div class="warn-txt">Este tipo aún no tiene costos en la matriz. Agrégalos en “Matriz de costos” o escribe el costo a mano.</div>' : ''}`;
     }
-    return `<div class="item" data-id="${it.id}">
-      <div class="item-head"><span class="item-num">Producto ${i + 1}${it.libre ? ' (libre)' : ''}</span>
-        <span><button class="btn sm ghost" data-act="dup">Duplicar</button> <button class="btn sm ghost danger" data-act="del">Quitar</button></span></div>
+    const foto = imgDe(it.imagen);
+    return `<div class="item ${foto ? 'con-img' : ''}" data-id="${it.id}">
+      ${foto ? `<img class="item-fondo" src="${foto}" alt="">` : ''}
+      <div class="item-head">
+        <span class="item-num">${i + 1}</span>
+        <input class="item-nombre" data-f="titulo" value="${esc(it.titulo)}" placeholder="Nombre del producto (ej: Pabellón Nacional)">
+        <span class="item-acc">
+          <input type="file" accept="image/*" data-file hidden>
+          <button class="btn sm ghost" data-act="img">${foto ? 'Cambiar imagen' : '＋ Imagen'}</button>
+          ${it.imagen ? '<button class="btn sm ghost" data-act="sinimg">Quitar imagen</button>' : ''}
+          <button class="btn sm ghost" data-act="dup">Duplicar</button>
+          <button class="btn sm ghost danger" data-act="del">Quitar</button></span></div>
       ${campos}
       <div class="item-margen">Margen: <span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>
       <div class="item-res" data-res></div>
       <div class="item-desc">
-        <input data-f="titulo" value="${esc(it.titulo)}" placeholder="Título en la cotización (si queda vacío: ${esc(tituloAuto(it) || 'tipo de bandera')})">
         <textarea data-f="obs" rows="2" placeholder="Descripción para el cliente (sale en la cotización y en la OT): diseño, terminaciones, vaina, flecos, etc.">${esc(it.obs)}</textarea>
       </div>
     </div>`;
@@ -520,10 +579,16 @@ function recalc() {
 const itemDe = el => D.items.find(i => i.id === el.closest('.item')?.dataset.id);
 
 $('#items').addEventListener('change', e => {
+  if (e.target.matches('[data-file]')) {
+    const it = itemDe(e.target), file = e.target.files[0];
+    if (it && file) subirImagen(it, file);
+    return;
+  }
   const it = itemDe(e.target); const f = e.target.dataset.f; if (!it || !f) return;
   if (f === 'tipo' || f === 'material' || f === 'medida') {
     it[f] = e.target.value;
     if (f === 'tipo') { it.material = ''; it.medida = '';
+      if (!it.titulo || it.titulo === it._tituloAuto) { it.titulo = tituloAuto(it); it._tituloAuto = it.titulo; }
       const mats = opcionesMaterial(it.tipo); if (mats.length === 1) it.material = mats[0]; }
     if (f !== 'medida') { const meds = it.material ? opcionesMedida(it.tipo, it.material) : [];
       if (!meds.includes(it.medida)) it.medida = meds.length === 1 ? meds[0] : ''; }
@@ -550,6 +615,8 @@ $('#items').addEventListener('click', e => {
   const act = e.target.dataset.act;
   if (act === 'del') { D.items = D.items.filter(x => x !== it); renderItems(); renderChipsGlobal(); }
   if (act === 'dup') { const i = D.items.indexOf(it); D.items.splice(i + 1, 0, { ...it, id: uid() }); renderItems(); }
+  if (act === 'img') e.target.closest('.item').querySelector('[data-file]').click();
+  if (act === 'sinimg') { it.imagen = null; renderItems(); }
 });
 $('#chipsGlobal').addEventListener('click', e => {
   if (!e.target.dataset.mg) return;
@@ -696,80 +763,126 @@ async function imprimir(html, titulo) {
 function htmlCotizacion(c) {
   const t = calcTotales(c);
   const cl = c.cliente || {};
-  const up = s => esc(String(s || '').toUpperCase());
-  const medidaDoc = m => esc(String(m || '').replace(/\s*x\s*/i, ' X '));
+  const br = s => esc(s).replace(/\n/g, '<br>');
+  const medidaDoc = m => esc(String(m || '').replace(/\s*x\s*/i, ' × '));
   const filas = t.lineas.map((l, i) => {
-    const it = l.it;
-    const titulo = it.titulo || tituloAuto(it);
-    return `<tr><td class="c">${i + 1}.-</td>
-      <td><span class="tit">${up(titulo)}</span>${it.obs ? ` <span class="det">${esc(it.obs).replace(/\n/g, '<br>')}</span>` : ''}</td>
-      <td class="c">${medidaDoc(it.medida)}</td><td class="c">${l.k.cant}</td><td class="c">${up(materialDoc(it))}</td>
-      <td class="m">${clp(l.precioDoc)}</td><td class="m">${clp(l.totalDoc)}</td></tr>`;
+    const it = l.it, titulo = it.titulo || tituloAuto(it);
+    return `<tr>
+      <td class="n">${i + 1}</td>
+      <td class="desc ${imgDe(it.imagen) ? 'con-img' : ''}">${imgDe(it.imagen) ? `<img class="fondo" src="${imgDe(it.imagen)}" alt="">` : ''}
+        <div class="txt"><div class="tit">${esc(titulo)}</div>${it.obs ? `<div class="det">${br(it.obs)}</div>` : ''}</div></td>
+      <td class="c">${medidaDoc(it.medida)}</td>
+      <td class="c">${l.k.cant}</td>
+      <td class="c mat">${esc(materialDoc(it))}</td>
+      <td class="m">${clp(l.precioDoc)}</td>
+      <td class="m b">${clp(l.totalDoc)}</td></tr>`;
   }).join('');
   const d = c.despacho || {};
-  const destino = d.calc?.destino || d.destino || '';
-  const filaDesp = t.despEnLinea ? `<tr><td class="c">${t.lineas.length + 1}.-</td>
-      <td><span class="tit">DESPACHO</span> <span class="det">${esc(d.nota || ('Correos de Chile' + (destino ? ' a ' + destino : '')))}</span></td>
-      <td class="c"></td><td class="c">1</td><td class="c"></td><td class="m">${clp(t.despCobro)}</td><td class="m">${clp(t.despCobro)}</td></tr>` : '';
-  const notaDesp = d.modo === 'retiro' ? 'RETIRO EN TALLER' : t.despIncluido ? 'DESPACHO INCLUIDO' : t.despEnLinea ? '' : '';
-  const plazo = esNumero(c.plazo) ? `PLAZO ENTREGA : ${+c.plazo} DÍAS HÁBILES` : c.plazo ? 'PLAZO ENTREGA : ' + up(c.plazo) : '';
-  const validez = esNumero(c.validez) ? `${+c.validez} DÍAS` : up(c.validez);
+  const destino = d.calc?.destino || d.destino || Envio.destinoDe(cl.region, cl.comuna) || '';
+  const via = d.modo === 'sucursal' ? 'Correos de Chile, retiro en sucursal' : d.modo === 'domicilio' ? 'Correos de Chile a domicilio' : (d.nota || 'Despacho');
+  const filaDesp = t.despEnLinea ? `<tr>
+      <td class="n">${t.lineas.length + 1}</td>
+      <td class="desc"><div class="tit">Despacho</div><div class="det">${esc(d.nota || via)}${destino && !d.nota ? ' · ' + esc(destino) : ''}</div></td>
+      <td class="c"></td><td class="c">1</td><td class="c"></td>
+      <td class="m">${clp(t.despCobro)}</td><td class="m b">${clp(t.despCobro)}</td></tr>` : '';
+  const textoDesp = d.modo === 'retiro' ? 'Retiro en nuestro taller (Viña del Mar)'
+    : t.despIncluido ? `Incluido · ${via}` : t.despEnLinea ? `${via} (ítem aparte)` : '';
+  const plazo = esNumero(c.plazo)
+    ? `${+c.plazo} días hábiles <span class="sub">(aprox. ${fechaCL(sumarDiasHabiles(c.fecha, +c.plazo))})</span>` : esc(c.plazo || '');
+  const validez = esNumero(c.validez)
+    ? `${+c.validez} días <span class="sub">(hasta ${fechaCL(sumarDias(c.fecha, +c.validez))})</span>` : esc(c.validez || '');
+  const fila = (k, v) => v ? `<div class="kv"><span>${k}</span><b>${v}</b></div>` : '';
   const contactos = String(CFG.contactos || '').split('\n').map(s => s.trim()).filter(Boolean);
-  const num = c.numero ? `${numDoc(c)}` : '<span class="borrador">(sin número)</span>';
-  return `<div class="carta">
-    <div class="c-head">
-      <div class="c-marca"><img src="logo.png" alt="Gary">
-        ${CFG.lema ? `<div class="c-lema">${esc(CFG.lema).replace(/\n/g, '<br>')}</div>` : ''}</div>
-      <div class="c-badges">
-        <span class="c-badge">Proveedores del Estado · ChileCompra</span>
-        <span class="c-badge">Sello Empresa Mujer</span>
-        <div class="c-num"><div class="t">NRO. COTIZACIÓN</div><div class="n">${num}</div>${c.version ? '<div class="v">(actualizada)</div>' : '<div class="v">&nbsp;</div>'}</div>
+  const num = c.numero ? numDoc(c) : '<span class="borrador">borrador</span>';
+  return `<div class="cot">
+    <header class="cot-top">
+      <div class="cot-brand"><img src="logo.png" alt="Gary">
+        ${CFG.lema ? `<div class="cot-lema">${br(CFG.lema)}</div>` : ''}</div>
+      <div class="cot-titulo">
+        <div class="cot-tag">Cotización</div>
+        <div class="cot-nro">N° ${num}</div>
+        ${c.version ? '<div class="cot-act">Versión actualizada</div>' : ''}
+        <div class="cot-fecha">${fechaCL(c.fecha)}</div>
       </div>
+    </header>
+
+    <section class="cot-info">
+      <div class="cot-card">
+        <h5>Cliente</h5>
+        <div class="cot-cliente">${esc(cl.nombre)}</div>
+        ${fila('RUT', esc(cl.rut))}
+        ${fila('Atención', esc(cl.contacto))}
+        ${fila('Teléfono', esc(cl.telefono))}
+        ${fila('Email', esc(cl.email))}
+        ${fila('Dirección', esc([cl.direccion, cl.comuna, cl.region ? 'Región ' + cl.region : ''].filter(Boolean).join(', ')))}
+      </div>
+      <div class="cot-card">
+        <h5>Condiciones comerciales</h5>
+        ${fila('Condición de pago', esc(c.condPago))}
+        ${fila('Plazo de entrega', plazo)}
+        ${fila('Validez de la oferta', validez)}
+        ${fila('Garantía de confección', esc(c.garantia))}
+        ${fila('Despacho', esc(textoDesp))}
+      </div>
+    </section>
+
+    <p class="cot-intro">Gracias por considerarnos para esta compra. A continuación le hacemos llegar nuestra propuesta:</p>
+
+    <table class="cot-items">
+      <thead><tr><th class="n">#</th><th>Descripción</th><th class="c">Medida (m)</th><th class="c">Cant.</th>
+        <th class="c">Material</th><th class="m">P. unitario</th><th class="m">Total neto</th></tr></thead>
+      <tbody>${filas}${filaDesp}</tbody>
+    </table>
+
+    <section class="cot-bottom">
+      <div class="cot-notas">
+        ${c.obs ? `<div class="cot-nota">${br(c.obs)}</div>` : ''}
+        <p class="cot-acepta">Para aceptar esta cotización, responda este correo o envíe su orden de compra indicando el N° ${c.numero ? numDoc(c) : 'de cotización'}.</p>
+      </div>
+      <table class="cot-tot">
+        <tr><td>Total neto</td><td>${clp(t.neto)}</td></tr>
+        <tr><td>IVA 19%</td><td>${clp(t.iva)}</td></tr>
+        <tr class="final"><td>Total</td><td>${clp(t.bruto)}</td></tr>
+      </table>
+    </section>
+
+    <div class="cot-cierre">
+    <section class="cot-pago">
+      <div>
+        <h5>Datos para transferencia</h5>
+        ${CFG.empresa ? `<div class="fuerte">${esc(CFG.empresa)}</div>` : ''}
+        ${fila('RUT', esc(CFG.rutEmpresa))}
+        ${fila('Banco', esc(CFG.banco))}
+        ${fila('Cuenta corriente', esc(CFG.cuentaCte))}
+        ${fila('Email', esc(CFG.mailEmpresa))}
+      </div>
+      <div>
+        <h5>Contactos</h5>
+        ${contactos.map(x => `<div class="fuerte">${esc(x)}</div>`).join('')}
+        ${CFG.fonoEmpresa ? `<div>${esc(CFG.fonoEmpresa)}</div>` : ''}
+        ${CFG.mailEmpresa ? `<div>${esc(CFG.mailEmpresa)}</div>` : ''}
+      </div>
+      <div class="cot-sellos">
+        <img src="sello-chilecompra.png" alt="Proveedores del Estado – ChileCompra" class="cc">
+        <img src="sello-mujer.png" alt="Sello Empresa Mujer" class="sm">
+      </div>
+    </section>
+
+    <footer class="cot-foot">
+      <img src="logo-compacto.png" alt="">
+      <div>${esc(CFG.empresa)}${CFG.dirEmpresa ? ' · ' + esc(CFG.dirEmpresa) : ''}${CFG.web ? ` · <span class="web">${esc(CFG.web)}</span>` : ''}</div>
+    </footer>
     </div>
-    <p class="c-intro">Gracias por considerarnos para esta compra.<br>A continuación hacemos llegar la siguiente cotización:</p>
-    <table class="c-grid">
-      <tr><th style="width:44%">Cliente</th><th>RUT</th><th>Fecha</th><th>Validez</th></tr>
-      <tr><td>${esc(cl.nombre)}${cl.contacto ? `<br><small>At.: ${esc(cl.contacto)}${cl.telefono ? ' · ' + esc(cl.telefono) : ''}${cl.email ? ' · ' + esc(cl.email) : ''}</small>` : ''}</td>
-        <td>${esc(cl.rut)}</td><td>${fechaCL(c.fecha)}</td><td>${validez}</td></tr>
-      <tr><th>Dirección</th><th>Región</th><th>Garantía confección</th><th>Condición pago</th></tr>
-      <tr><td>${esc([cl.direccion, cl.comuna].filter(Boolean).join(', '))}</td><td>${up(cl.region)}</td>
-        <td>${up(c.garantia)}</td><td>${up(c.condPago)}</td></tr>
-    </table>
-    <table class="c-items">
-      <tr><th style="width:40px">Ítem</th><th>Descripción</th><th style="width:78px">Medidas (mt)</th><th style="width:58px">Cantidad</th>
-        <th style="width:96px">Material</th><th style="width:82px">P/Unitario</th><th style="width:90px">Total neto</th></tr>
-      ${filas}${filaDesp}
-    </table>
-    <table class="c-pie">
-      <tr><td rowspan="3" class="notas">
-          ${c.obs ? `<p>${esc(c.obs).replace(/\n/g, '<br>')}</p>` : ''}
-          ${notaDesp ? `<p>${notaDesp}</p>` : ''}
-          ${plazo ? `<p>${plazo}</p>` : ''}</td>
-        <td class="lbl">TOTAL NETO</td><td class="val">${clp(t.neto)}</td></tr>
-      <tr><td class="lbl">IVA</td><td class="val">${clp(t.iva)}</td></tr>
-      <tr><td class="lbl">TOTAL C/IVA</td><td class="val">${clp(t.bruto)}</td></tr>
-    </table>
-    <div class="c-datos">
-      <div><h4>Datos para transferencia :</h4>
-        ${CFG.empresa ? `<b>${up(CFG.empresa)}</b><br>` : ''}
-        ${CFG.rutEmpresa ? `<b>Rut : ${esc(CFG.rutEmpresa)}</b><br>` : ''}
-        ${CFG.cuentaCte ? `<b>Cta. Cte. : ${esc(CFG.cuentaCte)}</b><br>` : ''}
-        ${CFG.banco ? `<b>Banco : ${esc(CFG.banco)}</b><br>` : ''}
-        ${CFG.mailEmpresa ? `<b>Email : ${esc(CFG.mailEmpresa)}</b>` : ''}</div>
-      <div><h4>Contactos :</h4>
-        ${contactos.map(x => `<b>${up(x)}</b>`).join('<br>')}
-        ${CFG.fonoEmpresa ? `<br><b>${esc(CFG.fonoEmpresa)}</b>` : ''}</div>
-    </div>
-    <div class="c-foot"><img src="logo-compacto.png" alt="">
-      <div>${up(CFG.empresa)}${CFG.dirEmpresa ? '<br>' + up(CFG.dirEmpresa) : ''}${CFG.web ? `<br><span class="web">${esc(CFG.web)}</span>` : ''}</div></div>
   </div>`;
 }
-function imprimirCotizacion(c) {
+async function imprimirCotizacion(c) {
+  await asegurarImagenes(c.items);
   imprimir(htmlCotizacion(c), `Cotización ${numDoc(c)}${c.version ? ' (actualizada)' : ''} · ${c.cliente.nombre} · Banderas Gary`);
 }
 
 /* Vista previa: muestra la cotización tal como la recibe el cliente, sin guardar. */
-function verCotizacion() {
+async function verCotizacion() {
+  await asegurarImagenes(D.items);
   const c = JSON.parse(JSON.stringify(D));
   c.items = c.items.filter(i => +i.cantidad > 0 && calcItem(i).precioU);
   if (!c.items.length) { toast('Agrega al menos un producto con costo para ver la cotización'); return; }
@@ -789,10 +902,11 @@ function ajustarVista() {
 window.addEventListener('resize', () => { if ($('#dlgVista').open) ajustarVista(); });
 $$('[data-ver]').forEach(b => b.onclick = verCotizacion);
 $('#btnVistaCerrar').onclick = () => $('#dlgVista').close();
-function imprimirOt(o) {
+async function imprimirOt(o) {
+  await asegurarImagenes(o.items);
   const filas = o.items.map((it, i) => `<tr><td class="num">${i + 1}</td><td class="num">${+it.cantidad}</td>
     <td>${esc(it.libre ? it.descripcion : it.tipo)}</td><td>${esc(it.libre ? '' : it.material)}</td><td>${esc(it.libre ? '' : it.medida)}</td>
-    <td>${esc(it.obs)}</td><td style="width:60px"></td></tr>`).join('');
+    <td>${imgDe(it.imagen) ? `<img src="${imgDe(it.imagen)}" style="height:60px;float:right;margin-left:8px;border-radius:4px">` : ''}${esc(it.obs)}</td><td style="width:60px"></td></tr>`).join('');
   imprimir(`<div class="doc">
     ${encabezado('ORDEN DE TRABAJO', o.numero, o.fecha)}
     ${bloqueCliente(o.cliente)}
@@ -838,7 +952,10 @@ $('#tablaCot').addEventListener('click', async e => {
     return;
   }
   const c = COTS.find(x => x.id === e.target.closest('tr').dataset.id); if (!c) return;
-  if (a === 'abrir') { D = JSON.parse(JSON.stringify(c)); saveDraft(); renderEditor(); mostrar('cotizar'); }
+  if (a === 'abrir') {
+    D = JSON.parse(JSON.stringify(c)); saveDraft(); renderEditor(); mostrar('cotizar');
+    asegurarImagenes(D.items).then(ok => { if (ok) renderItems(); });
+  }
   if (a === 'pdf') imprimirCotizacion(c);
   if (a === 'duplicar') {
     D = JSON.parse(JSON.stringify(c)); Object.assign(D, { id: null, numero: null, fecha: hoy() });
@@ -863,7 +980,7 @@ async function accionCot(a, id) {
       ot = { id: uid(), numero: null, fecha: hoy(), cotId: c.id, cotNumero: c.numero,
         cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
         despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
-        items: c.items.map(({ libre, tipo, material, medida, descripcion, cantidad, obs }) => ({ libre, tipo, material, medida, descripcion, cantidad, obs })),
+        items: c.items.map(({ libre, tipo, material, medida, descripcion, titulo, cantidad, obs, imagen }) => ({ libre, tipo, material, medida, descripcion, titulo, cantidad, obs, imagen })),
         estado: 'Pendiente' };
     }
     if (nubeActiva()) {
@@ -1039,6 +1156,7 @@ $('#fileImport').onchange = async e => {
 
 /* ---------------- Inicio ---------------- */
 renderEditor();
+asegurarImagenes(D.items).then(ok => { if (ok) renderItems(); });
 if (nubeActiva()) {
   actualizar();
   // Mantener sincronizado: al volver a la pestaña y cada 60 s.
