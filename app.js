@@ -275,26 +275,86 @@ async function asegurarImagenes(items) {
     return true;
   } catch (e) { return false; }
 }
-/* Achica la foto (máx. 900 px, JPEG) para que pese poco. */
-function comprimirImagen(file) {
+/* Convierte lo que se suba (foto, PNG, SVG o PDF) en un JPEG liviano (máx. 900 px). */
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let cargaPdfJs = null;
+function cargarPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (!cargaPdfJs) cargaPdfJs = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = PDFJS + 'pdf.min.js';
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; res(window.pdfjsLib); };
+    s.onerror = () => { cargaPdfJs = null; rej(new Error('no se pudo cargar el lector de PDF')); };
+    document.head.appendChild(s);
+  });
+  return cargaPdfJs;
+}
+const MAX_IMG = 900;
+function lienzo(w, h) {
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(w)); cv.height = Math.max(1, Math.round(h));
+  const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  return [cv, g];
+}
+/* Primera página del PDF (sirve también para .ai de Illustrator guardados con compatibilidad PDF). */
+async function pdfALienzo(file) {
+  const lib = await cargarPdfJs();
+  const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pag = await doc.getPage(1);
+  const v1 = pag.getViewport({ scale: 1 });
+  // alta resolución: si el diseño ocupa solo parte de la página, después del recorte sigue nítido
+  const vp = pag.getViewport({ scale: 2800 / Math.max(v1.width, v1.height) });
+  const [cv, g] = lienzo(vp.width, vp.height);
+  await pag.render({ canvasContext: g, viewport: vp }).promise;
+  return cv;
+}
+function imagenALienzo(file, esSvg) {
   return new Promise((res, rej) => {
     const url = URL.createObjectURL(file), img = new Image();
     img.onload = () => {
-      const max = 900, k = Math.min(1, max / Math.max(img.width, img.height));
-      const cv = document.createElement('canvas');
-      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
-      const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+      let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      if (!w || !h) { w = 1200; h = 800; }                 // SVG sin tamaño declarado
+      if (esSvg) { const k = (MAX_IMG * 1.5) / Math.max(w, h); w *= k; h *= k; }   // vectorial: se dibuja nítido
+      const [cv, g] = lienzo(w, h);
       g.drawImage(img, 0, 0, cv.width, cv.height);
-      URL.revokeObjectURL(url);
-      res(cv.toDataURL('image/jpeg', 0.8));
+      URL.revokeObjectURL(url); res(cv);
     };
-    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('no se pudo leer la imagen')); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('no se pudo leer el archivo')); };
     img.src = url;
   });
 }
+/* Quita bordes blancos (típico en PDF y SVG con margen). */
+function recortarBlanco(cv) {
+  const g = cv.getContext('2d'), { width: w, height: h } = cv;
+  const px = g.getImageData(0, 0, w, h).data;
+  const blanco = i => px[i] > 244 && px[i + 1] > 244 && px[i + 2] > 244;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+    if (!blanco((y * w + x) * 4)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < 0) return cv;                                   // todo blanco: se deja igual
+  const m = 6; x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(w - 1, x1 + m); y1 = Math.min(h - 1, y1 + m);
+  if (x1 - x0 > w * 0.97 && y1 - y0 > h * 0.97) return cv;
+  const [out, go] = lienzo(x1 - x0 + 1, y1 - y0 + 1);
+  go.drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+  return out;
+}
+async function comprimirImagen(file) {
+  const nombre = (file.name || '').toLowerCase();
+  const esPdf = file.type === 'application/pdf' || /\.(pdf|ai)$/.test(nombre);
+  const esSvg = file.type === 'image/svg+xml' || nombre.endsWith('.svg');
+  let cv = esPdf ? await pdfALienzo(file) : await imagenALienzo(file, esSvg);
+  if (esPdf || esSvg) cv = recortarBlanco(cv);
+  const k = Math.min(1, MAX_IMG / Math.max(cv.width, cv.height));
+  const [fin, g] = lienzo(cv.width * k, cv.height * k);
+  g.drawImage(cv, 0, 0, fin.width, fin.height);
+  return fin.toDataURL('image/jpeg', 0.82);
+}
 async function subirImagen(it, file) {
   let data;
-  try { data = await comprimirImagen(file); } catch (e) { toast('No se pudo leer la imagen'); return; }
+  toast('Procesando ' + (/\.(pdf|ai)$/i.test(file.name) ? 'PDF' : 'imagen') + '…');
+  try { data = await comprimirImagen(file); }
+  catch (e) { toast('No se pudo leer el archivo (' + e.message + '). Formatos: JPG, PNG, SVG o PDF.'); return; }
   const id = 'img' + uid();
   guardarImgLocal(id, data);
   it.imagen = id; renderItems();
@@ -534,7 +594,7 @@ function renderItems() {
         <span class="item-num">${i + 1}</span>
         <input class="item-nombre" data-f="titulo" value="${esc(it.titulo)}" placeholder="Nombre del producto (ej: Pabellón Nacional)">
         <span class="item-acc">
-          <input type="file" accept="image/*" data-file hidden>
+          <input type="file" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf,.ai" data-file hidden>
           <button class="btn sm ghost" data-act="img">${foto ? 'Cambiar imagen' : '＋ Imagen'}</button>
           ${it.imagen ? '<button class="btn sm ghost" data-act="sinimg">Quitar imagen</button>' : ''}
           <button class="btn sm ghost" data-act="dup">Duplicar</button>
