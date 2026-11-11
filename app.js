@@ -35,10 +35,10 @@ const FERIADOS = new Set([
   '2027-08-15', '2027-09-18', '2027-09-19', '2027-10-11', '2027-10-31', '2027-11-01', '2027-12-08', '2027-12-25',
 ]);
 
-const CAJAS_DEF = [   // EJEMPLO: reemplazar por las cajas reales
-  { id: 'chica', nombre: 'Caja chica', largo: 40, ancho: 30, alto: 20, pesoVacia: 0.3, capM2: 4 },
-  { id: 'mediana', nombre: 'Caja mediana', largo: 60, ancho: 40, alto: 30, pesoVacia: 0.5, capM2: 12 },
-  { id: 'grande', nombre: 'Caja grande', largo: 80, ancho: 50, alto: 40, pesoVacia: 0.8, capM2: 25 },
+const CAJAS_DEF = [   // cajas reales del taller (capM2 = estimación hasta tener las capacidades)
+  { id: 'chica', nombre: 'Caja chica', largo: 30.5, ancho: 25.5, alto: 20, pesoVacia: 0.2, capM2: 12 },
+  { id: 'mediana', nombre: 'Caja mediana', largo: 40, ancho: 30, alto: 30, pesoVacia: 0.35, capM2: 29 },
+  { id: 'grande', nombre: 'Caja grande', largo: 42, ancho: 36, alto: 32, pesoVacia: 0.4, capM2: 38 },
 ];
 const CONFIG_DEF = {
   empresa: 'Taller Gary', rutEmpresa: '', giro: 'Confección de banderas', dirEmpresa: '',
