@@ -181,3 +181,58 @@ dialog textarea{font-family:ui-monospace,Menlo,monospace;font-size:13px}
 #vistaDoc{background:#fff;padding:36px 40px;box-shadow:0 4px 18px rgba(0,0,0,.12);width:860px;margin:0 auto;box-sizing:border-box}
 .doc .borrador{color:#a15c00}
 @media(max-width:700px){.vista-papel{padding:10px}}
+
+/* despacho */
+.fields.desp{grid-template-columns:1.3fr 1.3fr 1.3fr 1fr;align-items:end}
+@media(max-width:800px){.fields.desp{grid-template-columns:1fr}}
+.fields label.check{flex-direction:row;align-items:center;font-size:13px;color:var(--ink);padding-bottom:8px}
+.desp-calc{margin:12px 0;font-size:14px}
+.desp-calc:empty{display:none}
+.desp-calc .cajas{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.desp-calc .caja{background:var(--accent-soft);border:1px solid #ead9a8;border-radius:8px;padding:6px 10px}
+.desp-calc .caja b{font-variant-numeric:tabular-nums}
+.desp-calc .manual{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;align-items:center}
+.desp-calc .manual input{width:64px;padding:5px 8px}
+a.mini{font-size:11px;font-weight:600;color:var(--accent-d);margin-left:6px}
+h3.sub{font-size:13px;margin:18px 0 4px;color:var(--blue)}
+.item-desc{display:grid;grid-template-columns:1fr;gap:6px;margin-top:10px}
+.item-desc textarea{font-size:13px}
+.item-desc input{font-size:13px;font-weight:600}
+table.editable input.n{max-width:80px;text-align:right}
+
+/* ===== Carta de cotización ===== */
+.carta{font-size:11px;color:#111;max-width:780px;margin:0 auto;border:1.5px solid #222;padding:14px 16px}
+.carta .c-head{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start}
+.carta .c-marca{text-align:center}
+.carta .c-marca img{height:84px}
+.carta .c-lema{font-style:italic;font-weight:700;font-size:10px;line-height:1.35;margin-top:4px;text-transform:uppercase;color:#333}
+.carta .c-badges{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.carta .c-badge{border:1.5px solid var(--accent);color:var(--accent-d);border-radius:999px;padding:3px 10px;font-weight:800;font-size:9px;text-transform:uppercase;letter-spacing:.04em;text-align:center}
+.carta .c-num{border:1.5px solid #222;text-align:center;min-width:170px;margin-top:6px}
+.carta .c-num .t{background:#dfe6f1;font-weight:800;padding:3px;border-bottom:1.5px solid #222;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.carta .c-num .n{font-size:15px;font-weight:800;padding:3px 6px 0}
+.carta .c-num .v{font-size:10px;padding-bottom:3px}
+.carta .c-intro{margin:10px 0 8px 6px;font-size:12px}
+.carta table{width:100%;border-collapse:collapse}
+.carta th{background:#dfe6f1;color:#111;font-size:9.5px;text-transform:uppercase;padding:5px 4px;border:1px solid #222;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.carta td{border:1px solid #222;padding:6px 6px;vertical-align:middle}
+.carta .c-grid td{text-align:center;height:24px}
+.carta .c-grid{margin-bottom:8px}
+.carta .c-items td.c{text-align:center}
+.carta .c-items td.m{text-align:right;white-space:nowrap}
+.carta .c-items .tit{font-weight:800;text-decoration:underline;text-transform:uppercase}
+.carta .c-items .det{text-transform:uppercase;font-size:10px}
+.carta .c-pie td{border:1px solid #222}
+.carta .c-pie .notas{text-align:center;font-weight:800;text-transform:uppercase;font-size:11px;border-right:1px solid #222}
+.carta .c-pie .notas p{margin:5px 0}
+.carta .c-pie .lbl{text-align:center;width:90px}
+.carta .c-pie .val{text-align:right;font-weight:800;width:110px;white-space:nowrap}
+.carta .c-datos{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;margin-top:12px;font-size:11px}
+.carta .c-datos h4{margin:0 0 4px;font-weight:400;font-style:italic;text-align:center;border-bottom:1.5px solid #222;padding-bottom:2px;font-size:12px}
+.carta .c-datos div{line-height:1.5}
+.carta .c-datos b{font-weight:800}
+.carta .c-foot{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;border-top:1.5px solid #222;margin-top:12px;padding-top:8px}
+.carta .c-foot img{height:38px}
+.carta .c-foot div{text-align:center;font-style:italic;font-size:10px;font-weight:700;line-height:1.4}
+.carta .c-foot .web{color:#1f5fb4}
+.carta .borrador{color:#a15c00}

@@ -54,7 +54,8 @@
             <span class="dias"><input type="number" min="0" data-d="plazo"><span class="fecha-calc" id="fechaPlazo"></span></span></label>
           <label>Validez de la oferta (días)
             <span class="dias"><input type="number" min="0" data-d="validez"><span class="fecha-calc" id="fechaValidez"></span></span></label>
-          <label class="wide">Observaciones (salen en la cotización)<textarea data-d="obs" rows="3"></textarea></label>
+          <label>Garantía confección<input data-d="garantia" placeholder="Ej: 6 meses"></label>
+          <label class="wide">Nota destacada al pie (sale en la cotización)<textarea data-d="obs" rows="2" placeholder="Ej: Imagen de cargo institucional – color institucional azul Francia"></textarea></label>
         </div>
       </div>
     </div>
@@ -75,13 +76,30 @@
     </div>
 
     <div class="card">
-      <h2>Despacho Correos de Chile</h2>
+      <h2>Despacho</h2>
+      <div class="fields desp">
+        <label>Envío
+          <select id="despModo">
+            <option value="domicilio">Correos Chile · entrega a domicilio</option>
+            <option value="sucursal">Correos Chile · retiro en sucursal</option>
+            <option value="manual">Otro transporte (monto a mano)</option>
+            <option value="retiro">Sin despacho · retira en taller</option>
+          </select></label>
+        <label data-solo-correos>Destino Correos<select id="despDestino"></select></label>
+        <label>En la cotización
+          <select id="despMostrar">
+            <option value="incluido">“Despacho incluido” (se reparte en los precios)</option>
+            <option value="linea">Como línea aparte</option>
+          </select></label>
+        <label class="check" data-solo-correos><input type="checkbox" id="despSecundaria"> Zona secundaria (+20%)</label>
+      </div>
+      <div id="despCalc" class="desp-calc"></div>
       <div class="fields three">
         <label>Costo para nosotros (neto)<input data-money inputmode="numeric" id="despCosto"></label>
-        <label>Cobro al cliente (neto)<input data-money inputmode="numeric" id="despCobro"></label>
-        <label>Detalle<input id="despNota" placeholder="Ej: Correos de Chile a Punta Arenas"></label>
+        <label>Cobro al cliente (neto) <a href="#" id="despIgualar" class="mini">= costo</a><input data-money inputmode="numeric" id="despCobro"></label>
+        <label>Detalle (opcional)<input id="despNota" placeholder="Ej: Correos de Chile a Punta Arenas"></label>
       </div>
-      <p class="hint">Por ahora el monto se ingresa a mano. Cuando tengamos las tarifas de Correos, se va a calcular solo. El despacho entra en el costo y en el margen total.</p>
+      <p class="hint">Tarifas Correos Paquete Express desde Valparaíso/Viña (oct. 2025). Se calcula para el pedido completo: cuántas cajas se usan y cuánto cobra Correos por todas. El despacho entra en el costo y en el margen total.</p>
     </div>
 
     <div class="card resumen">
@@ -140,14 +158,19 @@
     <div class="view-head"><h1>Configuración</h1></div>
     <div class="grid2">
       <div class="card">
-        <h2>Datos de la empresa (encabezado de la cotización)</h2>
+        <h2>Datos de la empresa (salen en la cotización)</h2>
         <div class="fields">
-          <label>Nombre<input data-cfg="empresa"></label>
+          <label>Razón social<input data-cfg="empresa"></label>
           <label>RUT<input data-cfg="rutEmpresa" data-rut></label>
-          <label>Giro<input data-cfg="giro"></label>
-          <label>Dirección<input data-cfg="dirEmpresa"></label>
-          <label>Teléfono<input data-cfg="fonoEmpresa"></label>
+          <label class="wide">Texto bajo el logo<textarea data-cfg="lema" rows="2"></textarea></label>
+          <label>Banco<input data-cfg="banco"></label>
+          <label>Cuenta corriente<input data-cfg="cuentaCte"></label>
           <label>Email<input data-cfg="mailEmpresa"></label>
+          <label>Teléfono<input data-cfg="fonoEmpresa"></label>
+          <label class="wide">Contactos (uno por línea)<textarea data-cfg="contactos" rows="2"></textarea></label>
+          <label class="wide">Dirección<input data-cfg="dirEmpresa"></label>
+          <label>Sitio web<input data-cfg="web"></label>
+          <label>Giro<input data-cfg="giro"></label>
         </div>
       </div>
       <div class="card">
@@ -156,6 +179,7 @@
           <label>Condición de pago por defecto<select data-cfg="condPago" data-condpago></select></label>
           <label>Plazo de entrega por defecto (días hábiles, vacío = en blanco)<input type="number" min="0" data-cfg="plazo"></label>
           <label>Validez por defecto (días, vacío = en blanco)<input type="number" min="0" data-cfg="validez"></label>
+          <label>Garantía confección por defecto<input data-cfg="garantia"></label>
           <label>Margen por defecto (%)<input type="number" data-cfg="margenDef"></label>
           <label>Redondear precio unitario hacia arriba a
             <select data-cfg="redondeo">
@@ -168,6 +192,17 @@
           <label>Próximo N° de cotización<input type="number" data-cfg="nextCot"></label>
           <label>Próximo N° de OT<input type="number" data-cfg="nextOt"></label>
         </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Cajas para despacho</h2>
+      <div id="avisoCajas" class="aviso">Las cajas y capacidades son <b>de ejemplo</b>. Cámbialas por las reales.</div>
+      <div class="table-wrap"><table class="list editable" id="tablaCajas"></table></div>
+      <h3 class="sub">¿Cuántas banderas caben en cada caja?</h3>
+      <p class="hint">Si una medida queda en blanco, se estima con los “m² que caben” de la caja.</p>
+      <div class="table-wrap"><table class="list editable" id="tablaCapacidad"></table></div>
+      <div class="fields three" style="margin-top:12px">
+        <label>Peso aprox. de bandera (kg por m²)<input type="number" step="0.05" min="0" data-cfg="pesoM2"></label>
       </div>
     </div>
     <div class="card">
@@ -197,6 +232,7 @@
   <div class="vista-papel"><div id="vistaDoc"></div></div>
 </dialog>
 
+<script src="despacho.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

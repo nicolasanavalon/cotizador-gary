@@ -35,10 +35,16 @@ const FERIADOS = new Set([
   '2027-08-15', '2027-09-18', '2027-09-19', '2027-10-11', '2027-10-31', '2027-11-01', '2027-12-08', '2027-12-25',
 ]);
 
+const CAJAS_DEF = [   // EJEMPLO: reemplazar por las cajas reales
+  { id: 'chica', nombre: 'Caja chica', largo: 40, ancho: 30, alto: 20, pesoVacia: 0.3, capM2: 4 },
+  { id: 'mediana', nombre: 'Caja mediana', largo: 60, ancho: 40, alto: 30, pesoVacia: 0.5, capM2: 12 },
+  { id: 'grande', nombre: 'Caja grande', largo: 80, ancho: 50, alto: 40, pesoVacia: 0.8, capM2: 25 },
+];
 const CONFIG_DEF = {
   empresa: 'Taller Gary', rutEmpresa: '', giro: 'Confección de banderas', dirEmpresa: '',
-  fonoEmpresa: '', mailEmpresa: '',
-  condPago: '', plazo: '', validez: '',
+  fonoEmpresa: '', mailEmpresa: '', lema: '', banco: '', cuentaCte: '', contactos: '', web: '',
+  condPago: '', plazo: '', validez: '', garantia: '',
+  cajas: CAJAS_DEF, capacidad: {}, pesoM2: 0.2, cajasEjemplo: true,
   margenDef: 40, redondeo: 100, nextCot: 1, nextOt: 1,
   tipos: TIPOS_DEF, materiales: MATERIALES_DEF,
 };
@@ -272,13 +278,14 @@ function nuevoBorrador() {
   return {
     id: null, numero: null, fecha: hoy(),
     cliente: { nombre: '', rut: '', contacto: '', telefono: '', email: '', direccion: '', comuna: '', region: '' },
-    condPago: CFG.condPago, plazo: CFG.plazo, validez: CFG.validez, obs: '',
+    condPago: CFG.condPago, plazo: CFG.plazo, validez: CFG.validez, garantia: CFG.garantia || '', obs: '',
     items: [nuevoItem()],
-    despacho: { costo: 0, cobro: 0, nota: '' },
+    despacho: { modo: 'domicilio', destino: '', secundaria: false, mostrar: 'incluido', manual: null,
+      costo: 0, cobro: 0, cobroManual: false, nota: '' },
   };
 }
 function nuevoItem(libre = false) {
-  return { id: uid(), libre, tipo: '', material: '', medida: '', descripcion: '', cantidad: 1, costo: 0, margen: +CFG.margenDef || 40, obs: '' };
+  return { id: uid(), libre, tipo: '', material: '', medida: '', descripcion: '', titulo: '', cantidad: 1, costo: 0, margen: +CFG.margenDef || 40, obs: '' };
 }
 
 /* ---------------- Cálculos ---------------- */
@@ -295,14 +302,89 @@ function calcItem(it) {
   return { costoU, cant, precioU, venta, costo, margen, margenPct: venta ? margen / venta : 0 };
 }
 function calcTotales(d) {
+  const lineas = d.items.map(it => ({ it, k: calcItem(it) }));
   let venta = 0, costo = 0;
-  for (const it of d.items) { const c = calcItem(it); venta += c.venta; costo += c.costo; }
-  const despCobro = +d.despacho.cobro || 0, despCosto = +d.despacho.costo || 0;
-  const neto = venta + despCobro, costoTot = costo + despCosto;
+  for (const l of lineas) { venta += l.k.venta; costo += l.k.costo; }
+  const desp = d.despacho || {};
+  const sinDesp = desp.modo === 'retiro';
+  let despCobro = sinDesp ? 0 : (+desp.cobro || 0);
+  const despCosto = sinDesp ? 0 : (+desp.costo || 0);
+  // "Despacho incluido": el cobro del despacho se reparte en los precios, proporcional a cada línea.
+  const incluido = desp.mostrar === 'incluido' && despCobro > 0 && venta > 0;
+  let neto;
+  if (incluido) {
+    for (const l of lineas) {
+      const extra = despCobro * l.k.venta / venta;
+      l.precioDoc = l.k.cant ? Math.round((l.k.venta + extra) / l.k.cant) : 0;
+      l.totalDoc = l.precioDoc * l.k.cant;
+    }
+    neto = lineas.reduce((s, l) => s + l.totalDoc, 0);
+    despCobro = neto - venta;
+  } else {
+    for (const l of lineas) { l.precioDoc = l.k.precioU; l.totalDoc = l.k.venta; }
+    neto = venta + despCobro;
+  }
   const iva = Math.round(neto * IVA);
-  const margen = neto - costoTot;
-  return { ventaProductos: venta, costoProductos: costo, despCobro, despCosto, neto, iva, bruto: neto + iva,
-    costo: costoTot, margen, margenPct: neto ? margen / neto : 0 };
+  const costoTot = costo + despCosto, margen = neto - costoTot;
+  return { lineas, ventaProductos: venta, costoProductos: costo, despCobro, despCosto,
+    despIncluido: incluido, despEnLinea: !incluido && despCobro > 0,
+    neto, iva, bruto: neto + iva, costo: costoTot, margen, margenPct: neto ? margen / neto : 0 };
+}
+const totalesGuardables = d => { const { lineas, ...t } = calcTotales(d); return t; };
+const numDoc = c => c.numero ? c.numero + (c.version ? '-' + c.version : '') : '';
+
+/* ---------------- Despacho (Correos) ---------------- */
+function destinoEfectivo(d) { return d.despacho.destino || Envio.destinoDe(d.cliente.region, d.cliente.comuna); }
+function piezasEnvio(d) {
+  return d.items.filter(i => !i.libre && i.medida && +i.cantidad > 0)
+    .map(i => ({ medida: i.medida, area: areaDe(i.medida), cantidad: +i.cantidad }));
+}
+/* Recalcula el costo del despacho de la cotización en edición. */
+function actualizarDespacho() {
+  const ds = D.despacho;
+  ds.calc = null;
+  if (ds.modo === 'domicilio' || ds.modo === 'sucursal') {
+    const destino = destinoEfectivo(D);
+    const opts = { tabla: CFG.capacidad, pesoM2: +CFG.pesoM2 || 0.2, servicio: ds.modo, destino, secundaria: !!ds.secundaria };
+    if (!destino) { ds.calc = { error: 'Elige la región del cliente o el destino Correos.' }; ds.costo = 0; }
+    else {
+      const r = ds.manual ? Envio.precioManual(ds.manual, CFG.cajas, opts) : Envio.empacar(piezasEnvio(D), CFG.cajas, opts);
+      ds.calc = { ...r, destino, servicio: ds.modo };
+      ds.costo = r.costo;
+    }
+    if (!ds.cobroManual) ds.cobro = ds.costo;
+  } else if (ds.modo === 'retiro') {
+    ds.costo = 0; if (!ds.cobroManual) ds.cobro = 0;
+  }
+}
+function renderDespacho() {
+  const ds = D.despacho, correos = ds.modo === 'domicilio' || ds.modo === 'sucursal';
+  $$('[data-solo-correos]').forEach(e => e.style.display = correos ? '' : 'none');
+  $('#despCosto').readOnly = correos || ds.modo === 'retiro';
+  if (document.activeElement !== $('#despCosto')) $('#despCosto').value = miles(ds.costo);
+  if (document.activeElement !== $('#despCobro')) $('#despCobro').value = miles(ds.cobro);
+  const auto = Envio.destinoDe(D.cliente.region, D.cliente.comuna);
+  $('#despDestino').innerHTML = `<option value="">${auto ? 'Automático: ' + esc(auto) : 'Automático (elige región)'}</option>` +
+    Envio.DESTINOS.map(x => opt(x, ds.destino)).join('');
+  const c = ds.calc, el = $('#despCalc');
+  if (!correos || !c) { el.innerHTML = ''; return; }
+  if (c.error) { el.innerHTML = `<div class="warn-txt">${esc(c.error)}</div>`; return; }
+  const cajas = c.cajas.length ? c.cajas.map(x => `<span class="caja">${x.n} × ${esc(x.nombre)} <small>(${String(x.kg).replace('.', ',')} kg)</small> · <b>${clp(x.unitario)}</b> c/u</span>`).join('')
+    : '<span class="hint">Sin banderas con medida para despachar.</span>';
+  const man = CFG.cajas.map(b => `<label>${esc(b.nombre)} <input type="number" min="0" data-caja="${b.id}" value="${ds.manual ? (+ds.manual[b.id] || 0) : (c.cajas.find(x => x.id === b.id)?.n || 0)}"></label>`).join('');
+  el.innerHTML = `<div class="cajas">${cajas}<span>→ total Correos <b>${clp(c.costo)}</b></span></div>
+    ${c.avisos.map(a => `<div class="warn-txt">${esc(a)}</div>`).join('')}
+    <div class="manual">${ds.manual ? 'Cajas a mano:' : 'Ajustar cajas:'} ${man}
+      ${ds.manual ? '<a href="#" class="mini" data-caja-auto>volver a cálculo automático</a>' : ''}</div>`;
+}
+function tituloAuto(it) {
+  if (it.libre) return it.descripcion || '';
+  return String(it.tipo || '').replace(/\s*\d\/Faz/i, '').replace(/\s*\(.*?\)/, '').trim();
+}
+function materialDoc(it) {
+  if (it.libre) return '';
+  const faz = /2\/Faz/i.test(it.tipo) ? ' doble faz' : '';
+  return (it.material || '') + faz;
 }
 function descItem(it) {
   if (it.libre) return it.descripcion || 'Ítem';
@@ -331,14 +413,18 @@ function chipsHtml(valor, attr) {
 }
 
 function renderEditor() {
-  $('#cotTitulo').textContent = D.numero ? `Cotización N° ${D.numero}` : 'Nueva cotización';
+  $('#cotTitulo').textContent = D.numero ? `Cotización N° ${numDoc(D)}${D.version ? ' (actualizada)' : ''}` : 'Nueva cotización';
   $$('[data-c]').forEach(i => i.value = D.cliente[i.dataset.c] || '');
   marcarRut($('[data-c="rut"]'));
   llenarCondPago($('[data-d="condPago"]'), D.condPago);
   $$('[data-d]').forEach(i => i.value = D[i.dataset.d] || '');
-  $('#despCosto').value = miles(D.despacho.costo);
-  $('#despCobro').value = miles(D.despacho.cobro);
-  $('#despNota').value = D.despacho.nota || '';
+  const ds = D.despacho;
+  if (!ds.modo) ds.modo = 'manual';            // cotizaciones antiguas: monto a mano
+  if (!ds.mostrar) ds.mostrar = 'linea';
+  $('#despModo').value = ds.modo;
+  $('#despMostrar').value = ds.mostrar;
+  $('#despSecundaria').checked = !!ds.secundaria;
+  $('#despNota').value = ds.nota || '';
   renderFechas();
   renderChipsGlobal();
   renderItems();
@@ -396,13 +482,18 @@ function renderItems() {
       ${campos}
       <div class="item-margen">Margen: <span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>
       <div class="item-res" data-res></div>
-      <div class="item-obs"><input data-f="obs" value="${esc(it.obs)}" placeholder="Detalle para la cotización / OT (opcional): diseño, terminaciones, etc."></div>
+      <div class="item-desc">
+        <input data-f="titulo" value="${esc(it.titulo)}" placeholder="Título en la cotización (si queda vacío: ${esc(tituloAuto(it) || 'tipo de bandera')})">
+        <textarea data-f="obs" rows="2" placeholder="Descripción para el cliente (sale en la cotización y en la OT): diseño, terminaciones, vaina, flecos, etc.">${esc(it.obs)}</textarea>
+      </div>
     </div>`;
   }).join('') || '<div class="empty">Sin productos. Agrega una bandera.</div>';
   recalc();
 }
 
 function recalc() {
+  actualizarDespacho();
+  renderDespacho();
   for (const it of D.items) {
     const el = $(`.item[data-id="${it.id}"] [data-res]`); if (!el) continue;
     const c = calcItem(it);
@@ -416,7 +507,7 @@ function recalc() {
   const t = calcTotales(D);
   $('#totales').innerHTML = `
     <div class="stat"><small>Productos (neto)</small><b>${clp(t.ventaProductos)}</b></div>
-    <div class="stat"><small>Despacho cobrado</small><b>${clp(t.despCobro)}</b></div>
+    <div class="stat"><small>${t.despIncluido ? 'Despacho (incluido en precios)' : 'Despacho cobrado'}</small><b>${clp(t.despCobro)}</b></div>
     <div class="stat"><small>Total neto</small><b>${clp(t.neto)}</b></div>
     <div class="stat"><small>IVA 19%</small><b>${clp(t.iva)}</b></div>
     <div class="stat big"><small>Total bruto (cliente paga)</small><b>${clp(t.bruto)}</b></div>
@@ -444,7 +535,7 @@ $('#items').addEventListener('input', e => {
   const it = itemDe(e.target); if (!it) return;
   const f = e.target.dataset.f;
   if (f === 'cantidad' || f === 'costo') { it[f] = num(e.target.value); recalc(); }
-  else if (f === 'descripcion' || f === 'obs') { it[f] = e.target.value; saveDraft(); }
+  else if (f === 'descripcion' || f === 'obs' || f === 'titulo') { it[f] = e.target.value; saveDraft(); }
   else if (e.target.hasAttribute('data-m-manual')) {
     it.margen = num(e.target.value);
     const box = e.target.closest('.item-margen');
@@ -471,10 +562,11 @@ $('#chipsGlobal').addEventListener('change', e => {
 
 $('#btnAddItem').onclick = () => { D.items.push(nuevoItem()); renderItems(); };
 $('#btnAddLibre').onclick = () => { D.items.push(nuevoItem(true)); renderItems(); };
-$$('[data-c]').forEach(i => i.oninput = () => { D.cliente[i.dataset.c] = i.value; saveDraft(); });
+$$('[data-c]').forEach(i => i.oninput = () => { D.cliente[i.dataset.c] = i.value; saveDraft();
+  if (i.dataset.c === 'comuna') recalc(); });
 $$('[data-d]').forEach(i => i.oninput = () => { D[i.dataset.d] = i.value; saveDraft(); renderFechas(); });
 $('#selRegion').innerHTML = '<option value="">Elegir…</option>' + REGIONES.map(r => `<option>${esc(r)}</option>`).join('');
-$('#selRegion').onchange = e => { D.cliente.region = e.target.value; saveDraft(); };
+$('#selRegion').onchange = e => { D.cliente.region = e.target.value; recalc(); };
 
 /* Montos: separador de miles mientras se escribe */
 document.addEventListener('input', e => {
@@ -504,11 +596,26 @@ document.addEventListener('input', e => {
   marcarRut(inp);
 }, true);
 $('#despCosto').oninput = e => {
+  if (e.target.readOnly) return;
   const nuevo = num(e.target.value);
-  if (+D.despacho.cobro === +D.despacho.costo) { D.despacho.cobro = nuevo; $('#despCobro').value = miles(nuevo); }
+  if (!D.despacho.cobroManual) D.despacho.cobro = nuevo;
   D.despacho.costo = nuevo; recalc();
 };
-$('#despCobro').oninput = e => { D.despacho.cobro = num(e.target.value); recalc(); };
+$('#despCobro').oninput = e => { D.despacho.cobro = num(e.target.value); D.despacho.cobroManual = true; recalc(); };
+$('#despIgualar').onclick = e => { e.preventDefault(); D.despacho.cobroManual = false; D.despacho.cobro = D.despacho.costo; recalc(); };
+$('#despModo').onchange = e => { D.despacho.modo = e.target.value; D.despacho.cobroManual = false; recalc(); };
+$('#despDestino').onchange = e => { D.despacho.destino = e.target.value; recalc(); };
+$('#despSecundaria').onchange = e => { D.despacho.secundaria = e.target.checked; recalc(); };
+$('#despMostrar').onchange = e => { D.despacho.mostrar = e.target.value; recalc(); };
+$('#despCalc').addEventListener('change', e => {
+  const id = e.target.dataset.caja; if (!id) return;
+  const m = {}; $$('#despCalc [data-caja]').forEach(i => m[i.dataset.caja] = Math.max(0, num(i.value)));
+  D.despacho.manual = m; recalc();
+});
+$('#despCalc').addEventListener('click', e => {
+  if (!e.target.hasAttribute('data-caja-auto')) return;
+  e.preventDefault(); D.despacho.manual = null; recalc();
+});
 $('#despNota').oninput = e => { D.despacho.nota = e.target.value; saveDraft(); };
 
 $('#btnNueva').onclick = () => {
@@ -524,11 +631,13 @@ function validar() {
   if (sinPrecio) { toast('Hay un producto sin costo: revisa tipo, material y medida'); return false; }
   return true;
 }
-async function guardarCotizacion() {
+const firmaCot = c => JSON.stringify([c.cliente, c.items, c.condPago, c.plazo, c.validez, c.garantia, c.obs,
+  { ...c.despacho, calc: undefined }]);
+async function guardarCotizacion(opciones = {}) {
   if (!validar()) return null;
   const snap = JSON.parse(JSON.stringify(D));
   snap.items = snap.items.filter(i => +i.cantidad > 0);
-  snap.totales = calcTotales(snap);
+  snap.totales = totalesGuardables(snap);
   snap.actualizado = new Date().toISOString();
   if (!D.id) {
     Object.assign(snap, { id: uid(), numero: null, estado: 'Pendiente', fecha: hoy() });
@@ -536,7 +645,10 @@ async function guardarCotizacion() {
     const prev = COTS.find(c => c.id === D.id);
     snap.estado = prev?.estado || D.estado || 'Pendiente';
     if (prev?.otNumero) snap.otNumero = prev.otNumero;
+    // Si ya se le había enviado el PDF al cliente y cambió algo, pasa a ser versión "actualizada" (N°-1, N°-2…)
+    if (prev?.pdf && firmaCot(prev) !== firmaCot(snap)) { snap.version = (+prev.version || 0) + 1; snap.pdf = false; }
   }
+  if (opciones.pdf) snap.pdf = true;
   try {
     if (nubeActiva()) Object.assign(snap, (await api('guardarCot', { cot: snap })).cot);
     else if (!snap.numero) { snap.numero = +CFG.nextCot || 1; CFG.nextCot = snap.numero + 1; saveCfg(); }
@@ -546,12 +658,12 @@ async function guardarCotizacion() {
   saveCots();
   D = JSON.parse(JSON.stringify(snap)); saveDraft();
   renderEditor();
-  toast(`Cotización N° ${snap.numero} guardada`);
+  toast(`Cotización N° ${numDoc(snap)} guardada`);
   return snap;
 }
 $('#btnGuardar').onclick = conBoton($('#btnGuardar'), guardarCotizacion);
 $$('[data-pdf]').forEach(b => b.onclick = conBoton(b, async () => {
-  const c = await guardarCotizacion();
+  const c = await guardarCotizacion({ pdf: true });
   if (c) { if ($('#dlgVista').open) $('#dlgVista').close(); imprimirCotizacion(c); }
 }));
 
@@ -582,36 +694,85 @@ async function imprimir(html, titulo) {
   setTimeout(() => { window.print(); document.title = prev; }, 50);
 }
 function htmlCotizacion(c) {
-  const t = c.totales || calcTotales(c);
-  const filas = c.items.map(it => { const k = calcItem(it);
-    return `<tr><td class="num">${k.cant}</td><td>${esc(descItem(it))}${it.obs ? `<div class="small">${esc(it.obs)}</div>` : ''}</td>
-      <td class="num">${clp(k.precioU)}</td><td class="num">${clp(k.venta)}</td></tr>`; }).join('');
-  const desp = t.despCobro ? `<tr><td class="num">1</td><td>Despacho${c.despacho.nota ? ' — ' + esc(c.despacho.nota) : ' Correos de Chile'}</td>
-      <td class="num">${clp(t.despCobro)}</td><td class="num">${clp(t.despCobro)}</td></tr>` : '';
-  return `<div class="doc">
-    ${encabezado('COTIZACIÓN', c.numero || '<span class="borrador">(sin número)</span>', c.fecha)}
-    ${bloqueCliente(c.cliente)}
-    <table><thead><tr><th class="num">Cant.</th><th>Descripción</th><th class="num">Precio unit. neto</th><th class="num">Total neto</th></tr></thead>
-      <tbody>${filas}${desp}</tbody></table>
-    <table class="tot">
-      <tr><td>Neto</td><td class="num">${clp(t.neto)}</td></tr>
-      <tr><td>IVA 19%</td><td class="num">${clp(t.iva)}</td></tr>
-      <tr class="final"><td>TOTAL</td><td class="num">${clp(t.bruto)}</td></tr></table>
-    <div class="cond">
-      ${c.condPago ? `<p><b>Condición de pago:</b> ${esc(c.condPago)}</p>` : ''}
-      ${textoPlazo(c) ? `<p><b>Plazo de entrega:</b> ${esc(textoPlazo(c))}</p>` : ''}
-      ${textoValidez(c) ? `<p><b>Validez de la oferta:</b> ${esc(textoValidez(c))}</p>` : ''}
-      ${c.obs ? `<p><b>Observaciones:</b> ${esc(c.obs).replace(/\n/g, '<br>')}</p>` : ''}
-    </div></div>`;
+  const t = calcTotales(c);
+  const cl = c.cliente || {};
+  const up = s => esc(String(s || '').toUpperCase());
+  const medidaDoc = m => esc(String(m || '').replace(/\s*x\s*/i, ' X '));
+  const filas = t.lineas.map((l, i) => {
+    const it = l.it;
+    const titulo = it.titulo || tituloAuto(it);
+    return `<tr><td class="c">${i + 1}.-</td>
+      <td><span class="tit">${up(titulo)}</span>${it.obs ? ` <span class="det">${esc(it.obs).replace(/\n/g, '<br>')}</span>` : ''}</td>
+      <td class="c">${medidaDoc(it.medida)}</td><td class="c">${l.k.cant}</td><td class="c">${up(materialDoc(it))}</td>
+      <td class="m">${clp(l.precioDoc)}</td><td class="m">${clp(l.totalDoc)}</td></tr>`;
+  }).join('');
+  const d = c.despacho || {};
+  const destino = d.calc?.destino || d.destino || '';
+  const filaDesp = t.despEnLinea ? `<tr><td class="c">${t.lineas.length + 1}.-</td>
+      <td><span class="tit">DESPACHO</span> <span class="det">${esc(d.nota || ('Correos de Chile' + (destino ? ' a ' + destino : '')))}</span></td>
+      <td class="c"></td><td class="c">1</td><td class="c"></td><td class="m">${clp(t.despCobro)}</td><td class="m">${clp(t.despCobro)}</td></tr>` : '';
+  const notaDesp = d.modo === 'retiro' ? 'RETIRO EN TALLER' : t.despIncluido ? 'DESPACHO INCLUIDO' : t.despEnLinea ? '' : '';
+  const plazo = esNumero(c.plazo) ? `PLAZO ENTREGA : ${+c.plazo} DÍAS HÁBILES` : c.plazo ? 'PLAZO ENTREGA : ' + up(c.plazo) : '';
+  const validez = esNumero(c.validez) ? `${+c.validez} DÍAS` : up(c.validez);
+  const contactos = String(CFG.contactos || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const num = c.numero ? `${numDoc(c)}` : '<span class="borrador">(sin número)</span>';
+  return `<div class="carta">
+    <div class="c-head">
+      <div class="c-marca"><img src="logo.png" alt="Gary">
+        ${CFG.lema ? `<div class="c-lema">${esc(CFG.lema).replace(/\n/g, '<br>')}</div>` : ''}</div>
+      <div class="c-badges">
+        <span class="c-badge">Proveedores del Estado · ChileCompra</span>
+        <span class="c-badge">Sello Empresa Mujer</span>
+        <div class="c-num"><div class="t">NRO. COTIZACIÓN</div><div class="n">${num}</div>${c.version ? '<div class="v">(actualizada)</div>' : '<div class="v">&nbsp;</div>'}</div>
+      </div>
+    </div>
+    <p class="c-intro">Gracias por considerarnos para esta compra.<br>A continuación hacemos llegar la siguiente cotización:</p>
+    <table class="c-grid">
+      <tr><th style="width:44%">Cliente</th><th>RUT</th><th>Fecha</th><th>Validez</th></tr>
+      <tr><td>${esc(cl.nombre)}${cl.contacto ? `<br><small>At.: ${esc(cl.contacto)}${cl.telefono ? ' · ' + esc(cl.telefono) : ''}${cl.email ? ' · ' + esc(cl.email) : ''}</small>` : ''}</td>
+        <td>${esc(cl.rut)}</td><td>${fechaCL(c.fecha)}</td><td>${validez}</td></tr>
+      <tr><th>Dirección</th><th>Región</th><th>Garantía confección</th><th>Condición pago</th></tr>
+      <tr><td>${esc([cl.direccion, cl.comuna].filter(Boolean).join(', '))}</td><td>${up(cl.region)}</td>
+        <td>${up(c.garantia)}</td><td>${up(c.condPago)}</td></tr>
+    </table>
+    <table class="c-items">
+      <tr><th style="width:40px">Ítem</th><th>Descripción</th><th style="width:78px">Medidas (mt)</th><th style="width:58px">Cantidad</th>
+        <th style="width:96px">Material</th><th style="width:82px">P/Unitario</th><th style="width:90px">Total neto</th></tr>
+      ${filas}${filaDesp}
+    </table>
+    <table class="c-pie">
+      <tr><td rowspan="3" class="notas">
+          ${c.obs ? `<p>${esc(c.obs).replace(/\n/g, '<br>')}</p>` : ''}
+          ${notaDesp ? `<p>${notaDesp}</p>` : ''}
+          ${plazo ? `<p>${plazo}</p>` : ''}</td>
+        <td class="lbl">TOTAL NETO</td><td class="val">${clp(t.neto)}</td></tr>
+      <tr><td class="lbl">IVA</td><td class="val">${clp(t.iva)}</td></tr>
+      <tr><td class="lbl">TOTAL C/IVA</td><td class="val">${clp(t.bruto)}</td></tr>
+    </table>
+    <div class="c-datos">
+      <div><h4>Datos para transferencia :</h4>
+        ${CFG.empresa ? `<b>${up(CFG.empresa)}</b><br>` : ''}
+        ${CFG.rutEmpresa ? `<b>Rut : ${esc(CFG.rutEmpresa)}</b><br>` : ''}
+        ${CFG.cuentaCte ? `<b>Cta. Cte. : ${esc(CFG.cuentaCte)}</b><br>` : ''}
+        ${CFG.banco ? `<b>Banco : ${esc(CFG.banco)}</b><br>` : ''}
+        ${CFG.mailEmpresa ? `<b>Email : ${esc(CFG.mailEmpresa)}</b>` : ''}</div>
+      <div><h4>Contactos :</h4>
+        ${contactos.map(x => `<b>${up(x)}</b>`).join('<br>')}
+        ${CFG.fonoEmpresa ? `<br><b>${esc(CFG.fonoEmpresa)}</b>` : ''}</div>
+    </div>
+    <div class="c-foot"><img src="logo-compacto.png" alt="">
+      <div>${up(CFG.empresa)}${CFG.dirEmpresa ? '<br>' + up(CFG.dirEmpresa) : ''}${CFG.web ? `<br><span class="web">${esc(CFG.web)}</span>` : ''}</div></div>
+  </div>`;
 }
-function imprimirCotizacion(c) { imprimir(htmlCotizacion(c), `Cotización ${c.numero} - ${c.cliente.nombre}`); }
+function imprimirCotizacion(c) {
+  imprimir(htmlCotizacion(c), `Cotización ${numDoc(c)}${c.version ? ' (actualizada)' : ''} · ${c.cliente.nombre} · Banderas Gary`);
+}
 
 /* Vista previa: muestra la cotización tal como la recibe el cliente, sin guardar. */
 function verCotizacion() {
   const c = JSON.parse(JSON.stringify(D));
   c.items = c.items.filter(i => +i.cantidad > 0 && calcItem(i).precioU);
   if (!c.items.length) { toast('Agrega al menos un producto con costo para ver la cotización'); return; }
-  c.totales = calcTotales(c);
   if (!c.numero) c.fecha = hoy();
   $('#vistaDoc').innerHTML = htmlCotizacion(c);
   $('#dlgVista').showModal();
@@ -654,7 +815,7 @@ function renderCotizaciones() {
   if (!rows.length) { $('#tablaCot').innerHTML = `<tr><td class="empty">${COTS.length ? 'Sin resultados.' : 'Aún no hay cotizaciones guardadas.'}</td></tr>`; return; }
   $('#tablaCot').innerHTML = `<thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th class="num">Neto</th><th class="num">Total bruto</th><th class="num">Margen</th><th>Estado</th><th></th></tr></thead><tbody>` +
     rows.map(c => { const t = c.totales; const ot = OTS.find(o => o.cotId === c.id);
-      return `<tr data-id="${c.id}"><td><b>${c.numero}</b></td><td>${fechaCL(c.fecha)}</td><td>${esc(c.cliente.nombre)}</td>
+      return `<tr data-id="${c.id}"><td><b>${numDoc(c)}</b></td><td>${fechaCL(c.fecha)}</td><td>${esc(c.cliente.nombre)}</td>
       <td class="num">${clp(t.neto)}</td><td class="num">${clp(t.bruto)}</td><td class="num">${clp(t.margen)} · ${pct(t.margenPct)}</td>
       <td><span class="badge ${c.estado}">${c.estado}</span>${ot ? ` <small>OT ${ot.numero}</small>` : ''}</td>
       <td class="acc">
@@ -811,10 +972,48 @@ function llenarCondPago(sel, valor) {
   sel.innerHTML = '<option value="">Elegir…</option>' + ops.map(o => opt(o, valor)).join('');
 }
 function renderConfig() {
-  llenarCondPago($('[data-cfg="condPago"]'), CFG.condPago); $$('[data-cfg]').forEach(i => i.value = CFG[i.dataset.cfg] ?? ''); }
+  llenarCondPago($('[data-cfg="condPago"]'), CFG.condPago); $$('[data-cfg]').forEach(i => i.value = CFG[i.dataset.cfg] ?? '');
+  renderCajas();
+}
+function renderCajas() {
+  $('#avisoCajas').style.display = CFG.cajasEjemplo ? '' : 'none';
+  const cajas = CFG.cajas || [];
+  $('#tablaCajas').innerHTML = `<thead><tr><th>Caja</th><th class="num">Largo cm</th><th class="num">Ancho cm</th><th class="num">Alto cm</th>
+    <th class="num">Peso caja kg</th><th class="num">m² de bandera que caben</th><th class="num">Peso vol. kg</th></tr></thead><tbody>` +
+    cajas.map(c => `<tr data-caja="${c.id}"><td><input data-k="nombre" value="${esc(c.nombre)}"></td>
+      ${['largo', 'ancho', 'alto', 'pesoVacia', 'capM2'].map(k => `<td class="num"><input class="n" type="number" min="0" step="any" data-k="${k}" value="${esc(c[k])}"></td>`).join('')}
+      <td class="num">${String(Math.round(Envio.volumetrico(c) * 10) / 10).replace('.', ',')}</td></tr>`).join('') + '</tbody>';
+  const medidas = [...new Set(MATRIZ.map(r => r.medida).concat(Object.keys(CFG.capacidad || {})))]
+    .sort((a, b) => areaDe(a) - areaDe(b));
+  $('#tablaCapacidad').innerHTML = `<thead><tr><th>Medida (m)</th>${cajas.map(c => `<th class="num">${esc(c.nombre)}</th>`).join('')}</tr></thead><tbody>` +
+    medidas.map(m => `<tr data-medida="${esc(m)}"><td>${esc(m)}</td>${cajas.map(c => {
+      const v = (CFG.capacidad[m] || {})[c.id];
+      const est = c.capM2 > 0 ? Math.floor(c.capM2 / areaDe(m)) : '';
+      return `<td class="num"><input class="n" type="number" min="0" data-cap="${c.id}" value="${v ?? ''}" placeholder="≈${est}"></td>`;
+    }).join('')}</tr>`).join('') + '</tbody>';
+}
+function guardarCajas() {
+  CFG.cajasEjemplo = false; saveCfg(); renderCajas(); recalc();
+  subirConfig({ cajas: CFG.cajas, capacidad: CFG.capacidad, cajasEjemplo: false })
+    .then(() => toast('Guardado'), err => toast('No se pudo guardar: ' + err.message));
+}
+$('#tablaCajas').addEventListener('change', e => {
+  const k = e.target.dataset.k, c = CFG.cajas.find(x => x.id === e.target.closest('tr')?.dataset.caja); if (!k || !c) return;
+  c[k] = k === 'nombre' ? e.target.value : (parseFloat(String(e.target.value).replace(',', '.')) || 0);
+  guardarCajas();
+});
+$('#tablaCapacidad').addEventListener('change', e => {
+  const id = e.target.dataset.cap, m = e.target.closest('tr')?.dataset.medida; if (!id || !m) return;
+  CFG.capacidad = CFG.capacidad || {};
+  const fila = CFG.capacidad[m] = CFG.capacidad[m] || {};
+  if (e.target.value === '') delete fila[id]; else fila[id] = Math.max(0, Math.floor(num(e.target.value)));
+  if (!Object.keys(fila).length) delete CFG.capacidad[m];
+  guardarCajas();
+});
 $$('[data-cfg]').forEach(i => i.onchange = () => {
   const k = i.dataset.cfg;
   CFG[k] = (k === 'plazo' || k === 'validez') ? (i.value === '' ? '' : num(i.value))
+    : k === 'pesoM2' ? (parseFloat(String(i.value).replace(',', '.')) || 0)
     : i.type === 'number' || k === 'redondeo' ? num(i.value) : i.value;
   saveCfg();
   if (k === 'redondeo') recalc();
