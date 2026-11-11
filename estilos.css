@@ -283,3 +283,13 @@ table.editable input.n{max-width:80px;text-align:right}
 .cot-pago h5{margin-bottom:5px}
 .cot-sellos .cc{height:38px}
 .cot-sellos .sm{height:56px}
+
+/* Bandera más visible: completa (sin recorte), más opaca y con un desvanecido corto */
+.item-fondo{inset:auto;top:0;right:0;width:auto;max-width:68%;height:100%;object-fit:contain;object-position:right center;opacity:.55;
+  -webkit-mask-image:linear-gradient(to left,#000 60%,transparent 100%);mask-image:linear-gradient(to left,#000 60%,transparent 100%)}
+.cot-items .fondo{top:6px;right:6px;width:auto;max-width:40%;height:calc(100% - 12px);object-fit:contain;object-position:right center;
+  opacity:.92;border-radius:4px;
+  -webkit-mask-image:linear-gradient(to left,#000 78%,transparent 100%);mask-image:linear-gradient(to left,#000 78%,transparent 100%)}
+.cot-items td.desc.con-img .txt{max-width:62%;text-shadow:none}
+.cot-items .fondo{max-width:34%}
+.cot-items td.desc.con-img .txt{max-width:66%}
