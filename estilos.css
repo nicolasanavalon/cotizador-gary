@@ -293,3 +293,15 @@ table.editable input.n{max-width:80px;text-align:right}
 .cot-items td.desc.con-img .txt{max-width:62%;text-shadow:none}
 .cot-items .fondo{max-width:34%}
 .cot-items td.desc.con-img .txt{max-width:66%}
+
+/* Tarjeta del producto: bandera nítida en su propia columna (no de fondo) */
+.item.con-img{padding-right:268px}
+.item.con-img .item-head{margin-right:-254px}
+.item.con-img .item-fondo{position:absolute;inset:auto;top:62px;right:14px;width:240px;max-width:none;height:auto;max-height:calc(100% - 76px);
+  object-fit:contain;object-position:center top;opacity:1;-webkit-mask-image:none;mask-image:none;
+  border-radius:8px;border:1px solid var(--line);background:#fff;box-shadow:0 4px 14px rgba(0,0,0,.10)}
+@media(max-width:800px){
+  .item.con-img{padding-right:14px}
+  .item.con-img .item-head{margin-right:0}
+  .item.con-img .item-fondo{position:static;display:block;width:100%;height:170px;max-height:none;margin:0 0 12px;box-shadow:none}
+}
