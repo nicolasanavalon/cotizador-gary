@@ -170,3 +170,14 @@ dialog textarea{font-family:ui-monospace,Menlo,monospace;font-size:13px}
 .btn[disabled]{opacity:.55;cursor:wait}
 #dlgClave{max-width:380px}
 #dlgClave input{font-size:18px;margin-top:6px}
+
+/* vista previa de la cotización */
+.btn.dark{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.dark:hover{background:#000}
+.resumen-acciones{margin-top:14px}
+#dlgVista{max-width:900px;width:calc(100% - 24px);padding:0;background:#e9e7e2;max-height:calc(100vh - 24px)}
+.vista-barra{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;padding:12px 16px;border-bottom:1px solid var(--line)}
+.vista-papel{padding:18px;overflow-x:auto}
+#vistaDoc{background:#fff;padding:36px 40px;box-shadow:0 4px 18px rgba(0,0,0,.12);width:860px;margin:0 auto;box-sizing:border-box}
+.doc .borrador{color:#a15c00}
+@media(max-width:700px){.vista-papel{padding:10px}}

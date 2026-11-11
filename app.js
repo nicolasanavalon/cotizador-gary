@@ -72,7 +72,7 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const clp = n => '$ ' + Math.round(n || 0).toLocaleString('es-CL');
-const pct = n => (isFinite(n) ? (n * 100).toLocaleString('es-CL', { maximumFractionDigits: 1 }) : '0') + '%';
+const pct = n => (isFinite(n) ? Math.round(n * 100).toLocaleString('es-CL') : '0') + '%';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = v => { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; };
 const hoy = () => new Date().toISOString().slice(0, 10);
@@ -550,7 +550,10 @@ async function guardarCotizacion() {
   return snap;
 }
 $('#btnGuardar').onclick = conBoton($('#btnGuardar'), guardarCotizacion);
-$('#btnPdf').onclick = conBoton($('#btnPdf'), async () => { const c = await guardarCotizacion(); if (c) imprimirCotizacion(c); });
+$$('[data-pdf]').forEach(b => b.onclick = conBoton(b, async () => {
+  const c = await guardarCotizacion();
+  if (c) { if ($('#dlgVista').open) $('#dlgVista').close(); imprimirCotizacion(c); }
+}));
 
 /* ---------------- Documentos imprimibles ---------------- */
 function encabezado(titulo, numero, fecha) {
@@ -578,15 +581,15 @@ async function imprimir(html, titulo) {
   const prev = document.title; document.title = titulo;
   setTimeout(() => { window.print(); document.title = prev; }, 50);
 }
-function imprimirCotizacion(c) {
+function htmlCotizacion(c) {
   const t = c.totales || calcTotales(c);
   const filas = c.items.map(it => { const k = calcItem(it);
     return `<tr><td class="num">${k.cant}</td><td>${esc(descItem(it))}${it.obs ? `<div class="small">${esc(it.obs)}</div>` : ''}</td>
       <td class="num">${clp(k.precioU)}</td><td class="num">${clp(k.venta)}</td></tr>`; }).join('');
   const desp = t.despCobro ? `<tr><td class="num">1</td><td>Despacho${c.despacho.nota ? ' — ' + esc(c.despacho.nota) : ' Correos de Chile'}</td>
       <td class="num">${clp(t.despCobro)}</td><td class="num">${clp(t.despCobro)}</td></tr>` : '';
-  imprimir(`<div class="doc">
-    ${encabezado('COTIZACIÓN', c.numero, c.fecha)}
+  return `<div class="doc">
+    ${encabezado('COTIZACIÓN', c.numero || '<span class="borrador">(sin número)</span>', c.fecha)}
     ${bloqueCliente(c.cliente)}
     <table><thead><tr><th class="num">Cant.</th><th>Descripción</th><th class="num">Precio unit. neto</th><th class="num">Total neto</th></tr></thead>
       <tbody>${filas}${desp}</tbody></table>
@@ -599,8 +602,32 @@ function imprimirCotizacion(c) {
       ${textoPlazo(c) ? `<p><b>Plazo de entrega:</b> ${esc(textoPlazo(c))}</p>` : ''}
       ${textoValidez(c) ? `<p><b>Validez de la oferta:</b> ${esc(textoValidez(c))}</p>` : ''}
       ${c.obs ? `<p><b>Observaciones:</b> ${esc(c.obs).replace(/\n/g, '<br>')}</p>` : ''}
-    </div></div>`, `Cotización ${c.numero} - ${c.cliente.nombre}`);
+    </div></div>`;
 }
+function imprimirCotizacion(c) { imprimir(htmlCotizacion(c), `Cotización ${c.numero} - ${c.cliente.nombre}`); }
+
+/* Vista previa: muestra la cotización tal como la recibe el cliente, sin guardar. */
+function verCotizacion() {
+  const c = JSON.parse(JSON.stringify(D));
+  c.items = c.items.filter(i => +i.cantidad > 0 && calcItem(i).precioU);
+  if (!c.items.length) { toast('Agrega al menos un producto con costo para ver la cotización'); return; }
+  c.totales = calcTotales(c);
+  if (!c.numero) c.fecha = hoy();
+  $('#vistaDoc').innerHTML = htmlCotizacion(c);
+  $('#dlgVista').showModal();
+  ajustarVista();
+  $('.vista-papel').scrollTop = 0;
+}
+/* En pantallas chicas, achica la hoja para que se vea completa (como un PDF). */
+function ajustarVista() {
+  const doc = $('#vistaDoc'), papel = $('.vista-papel');
+  doc.style.zoom = 1;
+  const disponible = papel.clientWidth - parseFloat(getComputedStyle(papel).paddingLeft) * 2;
+  doc.style.zoom = Math.min(1, disponible / doc.offsetWidth);
+}
+window.addEventListener('resize', () => { if ($('#dlgVista').open) ajustarVista(); });
+$$('[data-ver]').forEach(b => b.onclick = verCotizacion);
+$('#btnVistaCerrar').onclick = () => $('#dlgVista').close();
 function imprimirOt(o) {
   const filas = o.items.map((it, i) => `<tr><td class="num">${i + 1}</td><td class="num">${+it.cantidad}</td>
     <td>${esc(it.libre ? it.descripcion : it.tipo)}</td><td>${esc(it.libre ? '' : it.material)}</td><td>${esc(it.libre ? '' : it.medida)}</td>

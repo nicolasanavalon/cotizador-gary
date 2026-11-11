@@ -27,7 +27,8 @@
       <div class="actions">
         <button class="btn ghost" id="btnNueva">Nueva</button>
         <button class="btn" id="btnGuardar">Guardar</button>
-        <button class="btn primary" id="btnPdf">Guardar y generar PDF</button>
+        <button class="btn dark" data-ver>Ver cotización</button>
+        <button class="btn primary" data-pdf>Guardar y generar PDF</button>
       </div>
     </div>
 
@@ -87,6 +88,10 @@
       <h2>Resumen</h2>
       <div class="totales" id="totales"></div>
       <p class="hint">Costo y margen son internos: no aparecen en la cotización que recibe el cliente.</p>
+      <div class="actions end resumen-acciones">
+        <button class="btn dark" data-ver>Ver cotización</button>
+        <button class="btn primary" data-pdf>Guardar y generar PDF</button>
+      </div>
     </div>
   </section>
 
@@ -180,6 +185,17 @@
 <div id="print" class="print-only"></div>
 
 <div id="toast" class="no-print"></div>
+
+<dialog id="dlgVista" class="no-print">
+  <div class="vista-barra">
+    <b>Así la ve el cliente</b>
+    <span class="actions">
+      <button class="btn ghost" id="btnVistaCerrar">Cerrar</button>
+      <button class="btn primary" data-pdf>Guardar y generar PDF</button>
+    </span>
+  </div>
+  <div class="vista-papel"><div id="vistaDoc"></div></div>
+</dialog>
 
 <script src="app.js"></script>
 </body>
