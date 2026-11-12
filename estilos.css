@@ -380,3 +380,9 @@ table.editable input.n{max-width:80px;text-align:right}
 .sin-img svg{width:20px;height:20px}
 .sin-img b{color:var(--accent-d);font-weight:700}
 .sin-img:hover{border-color:var(--accent)}
+/* descripción más ancha (sin columna material) y filas más bajas */
+.cot-items .det{font-size:10.5px;line-height:1.4}
+.cot-items td.desc.con-img{height:auto;min-height:78px}
+.cot-items td.desc.con-img .txt{max-width:calc(100% - 150px);min-height:64px}
+.cot-items .fondo{max-width:140px}
+.cot-items .fondo.vacio{width:120px}

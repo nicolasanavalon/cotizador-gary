@@ -896,6 +896,19 @@ async function imprimir(html, titulo) {
   const prev = document.title; document.title = titulo;
   setTimeout(() => { window.print(); document.title = prev; }, 50);
 }
+/* Texto para el cliente: une saltos de línea sueltos y, si viene TODO EN MAYÚSCULAS,
+   lo deja como oración (primera letra en mayúscula). Lo guardado no se modifica. */
+function textoCliente(s) {
+  s = String(s || '').replace(/\r/g, '').replace(/([^\n])\n(?!\n)/g, '$1 ').replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.;:])/g, '$1').trim();
+  const letras = s.replace(/[^A-Za-zÁÉÍÓÚÑÜáéíóúñü]/g, '');
+  const mayus = letras.replace(/[^A-ZÁÉÍÓÚÑÜ]/g, '').length;
+  if (letras.length >= 8 && mayus / letras.length > 0.6) {
+    s = s.toLowerCase().replace(/(^|[.!?]\s+|\n\s*)([a-záéíóúñü])/g, (m, a, b) => a + b.toUpperCase());
+    const nombres = (CFG.materiales || []).concat(['Bistrech', 'Trevira', 'Chile', 'Schoenstatt']);
+    for (const n of nombres) s = s.replace(new RegExp('(^|[^a-záéíóúñü])' + n.toLowerCase() + '(?![a-záéíóúñü])', 'g'), (m, a) => a + n);
+  }
+  return s;
+}
 function htmlCotizacion(c) {
   const t = calcTotales(c);
   const cl = c.cliente || {};
@@ -907,10 +920,9 @@ function htmlCotizacion(c) {
       <td class="n">${i + 1}</td>
       <td class="desc con-img">${imgDe(it.imagen) ? `<img class="fondo" src="${imgDe(it.imagen)}" alt="">`
         : `<div class="fondo vacio">${ICONO_BANDERA}<span>Sin imagen</span></div>`}
-        <div class="txt"><div class="tit">${esc(titulo)}</div>${it.obs ? `<div class="det">${br(it.obs)}</div>` : ''}</div></td>
+        <div class="txt"><div class="tit">${esc(titulo)}</div>${it.obs ? `<div class="det">${br(textoCliente(it.obs))}</div>` : ''}</div></td>
       <td class="c">${medidaDoc(medidaEf(it))}</td>
       <td class="c">${l.k.cant}</td>
-      <td class="c mat">${esc(materialDoc(it))}${it.vaina ? `<div class="vaina">${esc(it.vaina)}</div>` : ''}</td>
       <td class="m">${clp(l.precioDoc)}</td>
       <td class="m b">${clp(l.totalDoc)}</td></tr>`;
   }).join('');
@@ -968,13 +980,13 @@ function htmlCotizacion(c) {
 
     <table class="cot-items">
       <thead><tr><th class="n">#</th><th>Descripción</th><th class="c">Medida (m)</th><th class="c">Cant.</th>
-        <th class="c">Material</th><th class="m">P. unitario</th><th class="m">Total neto</th></tr></thead>
+<th class="m">P. unitario</th><th class="m">Total neto</th></tr></thead>
       <tbody>${filas}${filaDesp}</tbody>
     </table>
 
     <section class="cot-bottom">
       <div class="cot-notas">
-        ${c.obs ? `<div class="cot-nota">${br(c.obs)}</div>` : ''}
+        ${c.obs ? `<div class="cot-nota">${br(textoCliente(c.obs))}</div>` : ''}
         ${d.modo !== 'retiro' ? `<div class="cot-gratis">${ICONO_CAMION}<span><b>Despacho gratis</b>${d.modo === 'sucursal' ? ' · retiro en sucursal Correos' : ' a domicilio'}</span></div>` : ''}
         <p class="cot-acepta">Para aceptar esta cotización, responda este correo o envíe su orden de compra indicando el N° ${c.numero ? numDoc(c) : 'de cotización'}.</p>
       </div>
