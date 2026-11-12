@@ -1055,25 +1055,136 @@ function ajustarVista() {
 window.addEventListener('resize', () => { if ($('#dlgVista').open) ajustarVista(); });
 $$('[data-ver]').forEach(b => b.onclick = verCotizacion);
 $('#btnVistaCerrar').onclick = () => $('#dlgVista').close();
+const otEntrega = o => o.entrega || (esNumero(o.plazo) ? sumarDiasHabiles(o.fecha, +o.plazo) : '');
+const caja = v => `<span class="box ${v ? 'on' : ''}">${v ? '✓' : ''}</span>`;
+function htmlOt(o) {
+  const cl = o.cliente || {};
+  const items = (o.items || []).map(x => normalizarItem(x));
+  const unidades = items.reduce((s, i) => s + (+i.cantidad || 0), 0);
+  const envio = o.envio || {};
+  const viaEnvio = envio.modo === 'retiro' ? 'Retira en taller'
+    : envio.modo === 'sucursal' ? 'Correos de Chile · retiro en sucursal'
+    : envio.modo === 'domicilio' ? 'Correos de Chile · a domicilio' : envio.modo === 'manual' ? 'Otro transporte' : '';
+  const ent = otEntrega(o);
+  const filas = items.map((it, i) => {
+    const foto = imgDe(it.imagen);
+    const nombre = it.titulo || tituloAuto(it) || productoEf(it);
+    const subtipo = esBandera(it) ? (it.tipo || '') : productoEf(it);
+    return `<article class="ot-item">
+      <div class="ot-foto">${foto ? `<img src="${foto}" alt="">` : `<div class="vacia">${ICONO_BANDERA}<span>Sin imagen</span></div>`}</div>
+      <div class="ot-body">
+        <div class="ot-tit"><span class="n">${i + 1}</span><b>${esc(nombre)}</b><span class="cant">${+it.cantidad || 0} <small>u.</small></span></div>
+        ${subtipo && subtipo !== nombre ? `<div class="ot-sub">${esc(subtipo)}</div>` : ''}
+        <div class="ot-specs">
+          <div><small>Medida (m)</small><b>${esc(medidaEf(it).replace(/\s*x\s*/i, ' × ')) || '—'}</b></div>
+          <div><small>Tela</small><b>${esc(materialEf(it)) || '—'}</b></div>
+          <div><small>D/Faz</small>${caja(it.dfaz)}</div>
+          <div><small>Aplicado</small>${caja(it.aplicado)}</div>
+          <div class="term"><small>Terminación</small><b>${esc(it.vaina || '—')}</b></div>
+        </div>
+        ${it.obs ? `<div class="ot-det">${esc(textoCliente(it.obs))}</div>` : ''}
+        ${it.notaTaller ? `<div class="ot-nota">⚠ ${esc(it.notaTaller)}</div>` : ''}
+        <div class="ot-check">${['Impreso / sublimado', 'Confección', 'Terminación', 'Revisado'].map(x => `<span>${caja(false)} ${x}</span>`).join('')}</div>
+      </div>
+    </article>`;
+  }).join('');
+  return `<div class="ot">
+    <header class="ot-top">
+      <div class="ot-brand"><img src="logo-compacto.png" alt="Gary"><div><b>Orden de trabajo</b><span>Uso interno · taller</span></div></div>
+      <div class="ot-num"><small>OT N°</small><b>${esc(o.numero ?? '—')}</b></div>
+    </header>
+    <div class="ot-fechas">
+      <div><small>Fecha OT</small><b>${fechaCL(o.fecha)}</b></div>
+      <div class="entrega"><small>Entrega</small><b>${ent ? fechaLarga(ent) : 'Por definir'}</b></div>
+      <div><small>Cotización</small><b>${esc(o.cotDoc || o.cotNumero || '—')}</b></div>
+      <div><small>Orden de compra</small><b>${esc(o.oc || '—')}</b></div>
+      <div><small>ID</small><b>${esc(o.idInterno || 's/n')}</b></div>
+    </div>
+    <section class="ot-info">
+      <div class="ot-card">
+        <h5>Cliente</h5>
+        <div class="nom">${esc(cl.nombre)}</div>
+        ${cl.contacto ? `<div><span>Contacto</span>${esc(cl.contacto)}</div>` : ''}
+        ${cl.telefono ? `<div><span>Teléfono</span>${esc(cl.telefono)}</div>` : ''}
+        ${cl.email ? `<div><span>Email</span>${esc(cl.email)}</div>` : ''}
+      </div>
+      <div class="ot-card">
+        <h5>Despacho</h5>
+        ${envio.modo === 'retiro' ? '<div class="dir">RETIRA EN TALLER</div>'
+          : `<div class="dir">${esc(cl.direccion || 'Sin dirección')}</div>
+             <div><span>Ciudad</span>${esc(cl.comuna)}</div><div><span>Región</span>${esc(cl.region)}</div>`}
+        ${viaEnvio && envio.modo !== 'retiro' ? `<div><span>Envío</span>${esc(viaEnvio)}${envio.cajas ? ' · ' + esc(envio.cajas) : ''}</div>` : ''}
+      </div>
+    </section>
+    <div class="ot-resumen">${items.length} producto${items.length === 1 ? '' : 's'} · <b>${unidades} unidad${unidades === 1 ? '' : 'es'}</b></div>
+    <section class="ot-items">${filas}</section>
+    <section class="ot-pie">
+      <div class="ot-obs"><h5>Observaciones del taller</h5>${o.obsTaller ? `<p>${esc(o.obsTaller).replace(/\n/g, '<br>')}</p>` : '<div class="lineas"></div>'}</div>
+      <div class="ot-firmas">${['Entregado a producción', 'Terminado', 'Despachado'].map(x => `<div><span></span>${x}<small>Nombre y fecha</small></div>`).join('')}</div>
+    </section>
+  </div>`;
+}
 async function imprimirOt(o) {
   await asegurarImagenes(o.items);
-  const filas = o.items.map((it, i) => `<tr><td class="num">${i + 1}</td><td class="num">${+it.cantidad}</td>
-    <td>${esc((normalizarItem(it), it.titulo || (esBandera(it) ? it.tipo : productoEf(it))))}${esBandera(it) && it.tipo && it.titulo ? '<br><small>' + esc(it.tipo) + '</small>' : ''}</td><td>${esc(materialEf(it))}${it.vaina ? '<br><small>' + esc(it.vaina) + '</small>' : ''}</td><td>${esc(medidaEf(it))}</td>
-    <td>${imgDe(it.imagen) ? `<img src="${imgDe(it.imagen)}" style="height:60px;float:right;margin-left:8px;border-radius:4px">` : ''}${esc(it.obs)}</td><td style="width:60px"></td></tr>`).join('');
-  imprimir(`<div class="doc">
-    ${encabezado('ORDEN DE TRABAJO', o.numero, o.fecha)}
-    ${bloqueCliente(o.cliente)}
-    <div class="doc-meta">
-      <div><span>Cotización:</span> N° ${esc(o.cotNumero)}</div>
-      <div><span>Fecha de entrega:</span> <b>${esc(textoPlazo({ plazo: o.plazo, fecha: o.fecha }))}</b></div>
-      ${o.despacho ? `<div style="grid-column:1/-1"><span>Despacho:</span> ${esc(o.despacho)}</div>` : ''}
-    </div>
-    <table><thead><tr><th class="num">#</th><th class="num">Cant.</th><th>Tipo / producto</th><th>Material</th><th>Medida (m)</th><th>Detalle</th><th>Listo</th></tr></thead>
-      <tbody>${filas}</tbody></table>
-    ${o.obs ? `<div class="cond"><p><b>Observaciones:</b> ${esc(o.obs).replace(/\n/g, '<br>')}</p></div>` : ''}
-    <div class="firma"><div>Entregado a producción</div><div>Recibido / terminado</div></div>
-  </div>`, `OT ${o.numero} - ${o.cliente.nombre}`);
+  imprimir(htmlOt(o), `OT ${o.numero} · ${o.cliente?.nombre || ''}`);
 }
+
+/* ---------------- Editor de OT ---------------- */
+let OT_ED = null;
+async function abrirOt(o) {
+  OT_ED = JSON.parse(JSON.stringify(o));
+  OT_ED.entrega = otEntrega(OT_ED);
+  (OT_ED.items || []).forEach(it => {
+    normalizarItem(it);
+    if (it.dfaz === undefined) it.dfaz = /2\/Faz/i.test(it.tipo || '') || /doble faz|d\/faz/i.test(it.obs || '');
+    if (it.aplicado === undefined) it.aplicado = /aplicaci/i.test(it.tipo || '');
+  });
+  $('#otTitulo').textContent = `OT N° ${OT_ED.numero} · ${OT_ED.cliente?.nombre || ''}`;
+  $('#otEntrega').value = OT_ED.entrega || '';
+  $('#otEstado').innerHTML = ESTADOS_OT.map(s => opt(s, OT_ED.estado)).join('');
+  $('#otOc').value = OT_ED.oc || ''; $('#otIdInt').value = OT_ED.idInterno || ''; $('#otObs').value = OT_ED.obsTaller || '';
+  $('#otItems').innerHTML = OT_ED.items.map((it, i) => `<div class="ot-ed-item" data-i="${i}">
+      <b>${i + 1}. ${esc(it.titulo || tituloAuto(it) || productoEf(it))}</b>
+      <label class="check"><input type="checkbox" data-k="dfaz" ${it.dfaz ? 'checked' : ''}> Doble faz</label>
+      <label class="check"><input type="checkbox" data-k="aplicado" ${it.aplicado ? 'checked' : ''}> Aplicado</label>
+      <input data-k="notaTaller" value="${esc(it.notaTaller || '')}" placeholder="Nota para el taller (ej: ESPEJO)">
+    </div>`).join('');
+  $('#dlgOt').showModal();
+  await asegurarImagenes(OT_ED.items);
+  vistaOt();
+}
+function vistaOt() {
+  $('#otDoc').innerHTML = htmlOt(OT_ED);
+  const doc = $('#otDoc'), papel = $('#dlgOt .vista-papel');
+  doc.style.zoom = 1; doc.style.zoom = Math.min(1, (papel.clientWidth - 24) / doc.offsetWidth);
+}
+$('#dlgOt').addEventListener('input', e => {
+  if (!OT_ED) return;
+  const t = e.target;
+  if (t.id === 'otEntrega') OT_ED.entrega = t.value;
+  else if (t.id === 'otEstado') OT_ED.estado = t.value;
+  else if (t.id === 'otOc') OT_ED.oc = t.value;
+  else if (t.id === 'otIdInt') OT_ED.idInterno = t.value;
+  else if (t.id === 'otObs') OT_ED.obsTaller = t.value;
+  else if (t.dataset.k) {
+    const it = OT_ED.items[+t.closest('.ot-ed-item').dataset.i];
+    it[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value;
+  } else return;
+  vistaOt();
+});
+$('#dlgOt').addEventListener('change', e => { if (e.target.id === 'otEstado') { OT_ED.estado = e.target.value; vistaOt(); } });
+async function guardarOtEd() {
+  try { if (nubeActiva()) await api('guardarOt', { ot: OT_ED }); }
+  catch (err) { toast('No se pudo guardar: ' + err.message); return false; }
+  const k = OTS.findIndex(x => x.id === OT_ED.id);
+  if (k >= 0) OTS[k] = JSON.parse(JSON.stringify(OT_ED));
+  saveOts(); renderOts(); toast(`OT ${OT_ED.numero} guardada`);
+  return true;
+}
+$('#btnOtCerrar').onclick = () => $('#dlgOt').close();
+$('#btnOtGuardar').onclick = conBoton($('#btnOtGuardar'), guardarOtEd);
+$('#btnOtPdf').onclick = conBoton($('#btnOtPdf'), async () => { if (await guardarOtEd()) { $('#dlgOt').close(); imprimirOt(OTS.find(x => x.id === OT_ED.id)); } });
+window.addEventListener('resize', () => { if ($('#dlgOt').open) vistaOt(); });
 
 /* ---------------- Lista de cotizaciones ---------------- */
 function renderCotizaciones() {
@@ -1130,11 +1241,15 @@ async function accionCot(a, id) {
   if (a === 'aprobar') {
     let ot = OTS.find(o => o.cotId === c.id);
     if (!ot) {
-      ot = { id: uid(), numero: null, fecha: hoy(), cotId: c.id, cotNumero: c.numero,
+      ot = { id: uid(), numero: null, fecha: hoy(), cotId: c.id, cotNumero: c.numero, cotDoc: numDoc(c),
         cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
+        entrega: esNumero(c.plazo) ? sumarDiasHabiles(hoy(), +c.plazo) : '', oc: '', idInterno: '', obsTaller: '',
+        envio: { modo: c.despacho?.modo || '', destino: c.despacho?.calc?.destino || '',
+          cajas: (c.despacho?.calc?.cajas || []).map(x => `${x.n} × ${x.nombre}`).join(' + ') },
         despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
         items: c.items.map(x => normalizarItem({ ...x })).map(({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen }) =>
-          ({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen })),
+          ({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen,
+            dfaz: /2\/Faz/i.test(tipo || '') || /doble faz|d\/faz/i.test(obs || ''), aplicado: /aplicaci/i.test(tipo || ''), notaTaller: '' })),
         estado: 'Pendiente' };
     }
     if (nubeActiva()) {
@@ -1156,16 +1271,17 @@ async function accionCot(a, id) {
 const ESTADOS_OT = ['Pendiente', 'En producción', 'Terminada'];
 function renderOts() {
   if (!OTS.length) { $('#tablaOt').innerHTML = '<tr><td class="empty">Aún no hay OTs. Se crean solas al aprobar una cotización.</td></tr>'; return; }
-  $('#tablaOt').innerHTML = `<thead><tr><th>OT</th><th>Fecha</th><th>Cliente</th><th>Cotización</th><th>Productos</th><th>Estado</th><th></th></tr></thead><tbody>` +
-    OTS.map(o => `<tr data-id="${o.id}"><td><b>${o.numero}</b></td><td>${fechaCL(o.fecha)}</td><td>${esc(o.cliente.nombre)}</td>
-      <td>N° ${o.cotNumero}</td><td>${o.items.reduce((s, i) => s + (+i.cantidad || 0), 0)} u.</td>
+  $('#tablaOt').innerHTML = `<thead><tr><th>OT</th><th>Fecha</th><th>Entrega</th><th>Cliente</th><th>Cotización</th><th>Productos</th><th>Estado</th><th></th></tr></thead><tbody>` +
+    OTS.map(o => `<tr data-id="${o.id}"><td><b>${o.numero}</b></td><td>${fechaCL(o.fecha)}</td><td><b>${otEntrega(o) ? fechaCL(otEntrega(o)) : '—'}</b></td><td>${esc(o.cliente.nombre)}</td>
+      <td>N° ${esc(o.cotDoc || o.cotNumero)}</td><td>${o.items.reduce((s, i) => s + (+i.cantidad || 0), 0)} u.</td>
       <td><select data-a="estado">${ESTADOS_OT.map(s => opt(s, o.estado)).join('')}</select></td>
-      <td class="acc"><button class="btn sm" data-a="pdf">Imprimir / PDF</button>
+      <td class="acc"><button class="btn sm" data-a="abrir">Abrir</button> <button class="btn sm" data-a="pdf">Imprimir / PDF</button>
         <button class="btn sm ghost danger" data-a="borrar">Borrar</button></td></tr>`).join('') + '</tbody>';
 }
 $('#tablaOt').addEventListener('click', async e => {
   const a = e.target.dataset.a; const o = OTS.find(x => x.id === e.target.closest('tr')?.dataset.id); if (!o) return;
   if (a === 'pdf') imprimirOt(o);
+  if (a === 'abrir') abrirOt(o);
   if (a === 'borrar' && confirm(`¿Borrar la OT N° ${o.numero}?`)) {
     try { if (nubeActiva()) await api('borrarOt', { id: o.id }); }
     catch (err) { toast('No se pudo borrar: ' + err.message); return; }

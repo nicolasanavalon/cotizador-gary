@@ -386,3 +386,99 @@ table.editable input.n{max-width:80px;text-align:right}
 .cot-items td.desc.con-img .txt{max-width:calc(100% - 150px);min-height:64px}
 .cot-items .fondo{max-width:140px}
 .cot-items .fondo.vacio{width:120px}
+
+/* ===== Orden de trabajo (documento interno) ===== */
+.ot{--g:#a8801f;--k:#1c1c1e;--mu:#66666b;--li:#e3dfd6;--am:#fff3b0;
+  font:11px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--k);max-width:780px;margin:0 auto}
+.ot *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ot h5{margin:0 0 6px;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--g);font-weight:800}
+.ot-top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:10px;border-bottom:3px solid var(--k)}
+.ot-brand{display:flex;align-items:center;gap:14px}
+.ot-brand img{height:44px}
+.ot-brand b{display:block;font-size:22px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.ot-brand span{font-size:10px;color:var(--mu);letter-spacing:.1em;text-transform:uppercase}
+.ot-num{background:var(--k);color:#fff;border-radius:10px;padding:6px 18px;text-align:center;min-width:130px}
+.ot-num small{display:block;font-size:9px;letter-spacing:.16em;color:#e3cf9b;font-weight:700}
+.ot-num b{font-size:30px;font-weight:900;line-height:1.05}
+.ot-fechas{display:grid;grid-template-columns:1fr 1.5fr 1fr 1.2fr .8fr;border:1.5px solid var(--k);border-radius:8px;margin:10px 0;overflow:hidden}
+.ot-fechas > div{padding:6px 10px;border-right:1px solid var(--li)}
+.ot-fechas > div:last-child{border-right:0}
+.ot-fechas small{display:block;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);font-weight:700}
+.ot-fechas b{font-size:13px}
+.ot-fechas .entrega{background:#fde8e6}
+.ot-fechas .entrega small{color:#b3261e}
+.ot-fechas .entrega b{color:#b3261e;font-size:16px;font-weight:900;text-transform:uppercase}
+.ot-info{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ot-card{border:1px solid var(--li);border-radius:8px;padding:8px 12px;background:#faf9f6}
+.ot-card > div{display:flex;gap:8px;padding:1px 0}
+.ot-card > div span{color:var(--mu);min-width:62px}
+.ot-card .nom{font-size:14px;font-weight:800;display:block}
+.ot-card .dir{display:block;background:var(--am);border-radius:4px;padding:3px 8px;margin:0 0 4px;font-size:13px;font-weight:800;text-transform:uppercase}
+.ot-resumen{margin:10px 0 6px;font-size:11px;color:var(--mu)}
+.ot-resumen b{color:var(--k)}
+.ot-items{display:flex;flex-direction:column;gap:8px}
+.ot-item{display:grid;grid-template-columns:190px 1fr;gap:14px;border:1.5px solid var(--k);border-radius:10px;padding:10px;break-inside:avoid}
+.ot-foto{display:flex;align-items:center;justify-content:center;background:#f6f4ef;border-radius:6px;min-height:120px;overflow:hidden}
+.ot-foto img{width:100%;height:100%;max-height:150px;object-fit:contain}
+.ot-foto .vacia{display:flex;flex-direction:column;align-items:center;gap:4px;color:#c4bcab;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.ot-foto .vacia svg{width:40px;height:40px}
+.ot-tit{display:flex;align-items:center;gap:10px}
+.ot-tit .n{background:var(--k);color:#fff;border-radius:999px;min-width:24px;height:24px;display:grid;place-items:center;font-weight:800}
+.ot-tit b{font-size:16px;font-weight:800;flex:1;line-height:1.15}
+.ot-tit .cant{font-size:22px;font-weight:900;border:2px solid var(--k);border-radius:8px;padding:0 10px;line-height:1.3}
+.ot-tit .cant small{font-size:11px;font-weight:700}
+.ot-sub{color:var(--mu);margin:2px 0 0 34px}
+.ot-specs{display:grid;grid-template-columns:1.1fr 1.2fr .8fr .8fr;gap:6px;margin-top:8px}
+.ot-specs > div{border:1px solid var(--li);border-radius:6px;padding:4px 8px;display:flex;flex-direction:column;gap:2px}
+.ot-specs small{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);font-weight:700}
+.ot-specs b{font-size:13px}
+.ot .box{display:inline-grid;place-items:center;width:16px;height:16px;border:1.5px solid var(--k);border-radius:3px;font-weight:900;font-size:12px;line-height:1;vertical-align:middle}
+.ot .box.on{background:var(--k);color:#fff}
+.ot-term{margin-top:6px;background:var(--am);border-radius:6px;padding:5px 10px;font-weight:800;text-transform:uppercase;font-size:12px}
+.ot-term small{display:block;font-size:8.5px;letter-spacing:.12em;color:#7a6a00;font-weight:700}
+.ot-det{margin-top:6px;color:#333;font-size:10.5px}
+.ot-nota{margin-top:6px;color:#b3261e;font-weight:900;font-size:13px;text-transform:uppercase;border:1.5px dashed #b3261e;border-radius:6px;padding:3px 10px;display:inline-block}
+.ot-check{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;padding-top:6px;border-top:1px dotted var(--li);font-size:10px;color:var(--mu)}
+.ot-check span{display:inline-flex;align-items:center;gap:5px}
+.ot-pie{display:grid;grid-template-columns:1fr 1.3fr;gap:14px;margin-top:12px;break-inside:avoid}
+.ot-obs{border:1px solid var(--li);border-radius:8px;padding:8px 12px}
+.ot-obs .lineas{height:54px;background:repeating-linear-gradient(transparent 0 17px,#ddd 17px 18px)}
+.ot-firmas{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:end}
+.ot-firmas > div{text-align:center;font-weight:700;font-size:10px}
+.ot-firmas span{display:block;border-bottom:1.5px solid var(--k);height:40px;margin-bottom:4px}
+.ot-firmas small{display:block;font-weight:400;color:var(--mu);font-size:9px}
+
+/* editor de OT */
+#dlgOt{max-width:1200px;width:calc(100% - 24px);padding:0;background:#e9e7e2;max-height:calc(100vh - 24px)}
+.ot-editor{display:grid;grid-template-columns:360px 1fr;align-items:start}
+.ot-form{background:#fff;padding:14px 16px;border-right:1px solid var(--line);min-height:100%}
+.ot-form .fields{grid-template-columns:1fr 1fr}
+.ot-ed-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px 8px}
+.ot-ed-item b{grid-column:1/-1;font-size:13px}
+.ot-ed-item input:not([type=checkbox]){grid-column:1/-1}
+.ot-ed-item .check{margin:0;font-size:13px}
+.obs-taller{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600;margin-top:8px}
+#otDoc{background:#fff;padding:30px 34px;box-shadow:0 4px 18px rgba(0,0,0,.12);width:860px;margin:0 auto;box-sizing:border-box}
+@media(max-width:900px){.ot-editor{grid-template-columns:1fr}.ot-form{border-right:0}}
+/* OT compacta: cabe una OT normal en una hoja */
+.ot-item{grid-template-columns:165px 1fr;gap:12px;padding:8px}
+.ot-foto{min-height:96px}
+.ot-foto img{max-height:120px}
+.ot-specs{grid-template-columns:.95fr 1fr .62fr .62fr 2.1fr;gap:5px;margin-top:6px}
+.ot-specs > div{padding:3px 7px}
+.ot-specs .term{background:var(--am);border-color:#efe08a}
+.ot-specs .term small{color:#7a6a00}
+.ot-specs .term b{font-size:11px;text-transform:uppercase;font-weight:800;line-height:1.2}
+.ot-det{margin-top:5px}
+.ot-check{margin-top:6px;padding-top:5px}
+.ot-tit b{font-size:15px}
+.ot-tit .cant{font-size:19px}
+.ot-info{gap:8px}
+.ot-fechas{margin:8px 0}
+.ot-resumen{margin:8px 0 5px}
+.ot-top{padding-bottom:7px}
+.ot-brand img{height:38px}
+.ot-num b{font-size:26px}
+.ot-firmas span{height:30px}
+.ot-obs .lineas{height:40px}
+.ot-pie{margin-top:10px}

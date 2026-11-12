@@ -218,6 +218,31 @@
 
 <div id="toast" class="no-print"></div>
 
+<dialog id="dlgOt" class="no-print">
+  <div class="vista-barra">
+    <b id="otTitulo">Orden de trabajo</b>
+    <span class="actions">
+      <button class="btn ghost" id="btnOtCerrar">Cerrar</button>
+      <button class="btn" id="btnOtGuardar">Guardar</button>
+      <button class="btn primary" id="btnOtPdf">Guardar e imprimir</button>
+    </span>
+  </div>
+  <div class="ot-editor">
+    <div class="ot-form">
+      <div class="fields">
+        <label>Fecha de entrega<input type="date" id="otEntrega"></label>
+        <label>Estado<select id="otEstado"></select></label>
+        <label>N° orden de compra<input id="otOc" placeholder="Si el cliente envió OC"></label>
+        <label>ID<input id="otIdInt" placeholder="s/n"></label>
+      </div>
+      <h3 class="sub">Productos</h3>
+      <div id="otItems"></div>
+      <label class="obs-taller">Observaciones para el taller<textarea id="otObs" rows="3" placeholder="Ej: entregar todo junto, revisar colores con el cliente…"></textarea></label>
+    </div>
+    <div class="vista-papel"><div id="otDoc"></div></div>
+  </div>
+</dialog>
+
 <dialog id="dlgVista" class="no-print">
   <div class="vista-barra">
     <b>Así la ve el cliente</b>
