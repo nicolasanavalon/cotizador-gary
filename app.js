@@ -20,6 +20,10 @@ const TIPOS_DEF = [
   'Bandera especial (c/estrellas, Magallanes, Viña, etc.)',
 ];
 const MATERIALES_DEF = ['Raso', 'Bistrech', 'Microperforado', 'Oxford', 'Raquelado'];
+const VAINAS = ['Wincha poliéster y argollas', 'Vaina de lona', 'Vaina de lona con driza incorporada'];
+const DESCUENTOS_RAPIDOS = [5, 10, 15];
+const ICONO_CAMION = '<svg viewBox="0 0 48 48" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h24v20H4z"/><path d="M28 19h8l7 7v6h-15z"/><circle cx="13" cy="35" r="4"/><circle cx="35" cy="35" r="4"/></svg>';
+const ICONO_BANDERA = '<svg viewBox="0 0 48 48" width="38" height="38" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 44V5"/><path d="M11 7c6-3 11 3 17 0s9-2 12 0v18c-3-2-6-3-12 0s-11-3-17 0"/></svg>';
 const CONDICIONES_PAGO = [
   'Crédito a 7 días', 'Crédito a 15 días', 'Crédito a 30 días', 'Transferencia anticipada',
   '50% anticipo y 50% contra entrega', '100% contra entrega',
@@ -396,7 +400,7 @@ function nuevoBorrador() {
   };
 }
 function nuevoItem(libre = false) {
-  return { id: uid(), libre, tipo: '', material: '', medida: '', descripcion: '', titulo: '', cantidad: 1, costo: 0, margen: +CFG.margenDef || 40, obs: '' };
+  return { id: uid(), libre, tipo: '', material: '', medida: '', vaina: '', descripcion: '', titulo: '', cantidad: 1, costo: 0, margen: +CFG.margenDef || 40, obs: '' };
 }
 
 /* ---------------- Cálculos ---------------- */
@@ -420,25 +424,30 @@ function calcTotales(d) {
   const sinDesp = desp.modo === 'retiro';
   let despCobro = sinDesp ? 0 : (+desp.cobro || 0);
   const despCosto = sinDesp ? 0 : (+desp.costo || 0);
-  // "Despacho incluido": el cobro del despacho se reparte en los precios, proporcional a cada línea.
-  const incluido = desp.mostrar === 'incluido' && despCobro > 0 && venta > 0;
-  let neto;
+  // El despacho nunca va como ítem: su cobro se reparte en los precios, proporcional a cada línea.
+  const incluido = despCobro > 0 && venta > 0;
+  let subtotal;
   if (incluido) {
     for (const l of lineas) {
       const extra = despCobro * l.k.venta / venta;
       l.precioDoc = l.k.cant ? Math.round((l.k.venta + extra) / l.k.cant) : 0;
       l.totalDoc = l.precioDoc * l.k.cant;
     }
-    neto = lineas.reduce((s, l) => s + l.totalDoc, 0);
-    despCobro = neto - venta;
+    subtotal = lineas.reduce((s, l) => s + l.totalDoc, 0);
+    despCobro = subtotal - venta;
   } else {
     for (const l of lineas) { l.precioDoc = l.k.precioU; l.totalDoc = l.k.venta; }
-    neto = venta + despCobro;
+    subtotal = venta;
   }
+  // Descuento sobre el precio de venta: baja el neto (y el margen), no los costos.
+  const pctDesc = Math.min(100, Math.max(0, +d.descuento || 0));
+  const descuento = Math.round(subtotal * pctDesc / 100);
+  const neto = subtotal - descuento;
   const iva = Math.round(neto * IVA);
   const costoTot = costo + despCosto, margen = neto - costoTot;
   return { lineas, ventaProductos: venta, costoProductos: costo, despCobro, despCosto,
-    despIncluido: incluido, despEnLinea: !incluido && despCobro > 0,
+    despIncluido: incluido, despEnLinea: false, subtotal, pctDesc, descuento,
+    margenSinDesc: subtotal ? (subtotal - costoTot) / subtotal : 0,
     neto, iva, bruto: neto + iva, costo: costoTot, margen, margenPct: neto ? margen / neto : 0 };
 }
 const totalesGuardables = d => { const { lineas, ...t } = calcTotales(d); return t; };
@@ -533,7 +542,6 @@ function renderEditor() {
   if (!ds.modo) ds.modo = 'manual';            // cotizaciones antiguas: monto a mano
   if (!ds.mostrar) ds.mostrar = 'linea';
   $('#despModo').value = ds.modo;
-  $('#despMostrar').value = ds.mostrar;
   $('#despSecundaria').checked = !!ds.secundaria;
   $('#despNota').value = ds.nota || '';
   renderFechas();
@@ -585,11 +593,15 @@ function renderItems() {
         <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
         <label>Costo unit. neto${modificado ? ' <span title="Distinto a la matriz">✎</span>' : ''}<input data-money inputmode="numeric" data-f="costo" value="${miles(it.costo)}"></label>
       </div>
+      <div class="item-grid vaina">
+        <label>Terminación<select data-f="vaina"><option value="">Elegir…</option>${VAINAS.concat(it.vaina && !VAINAS.includes(it.vaina) ? [it.vaina] : []).map(v => opt(v, it.vaina)).join('')}</select></label>
+      </div>
       ${it.tipo && !mats.length ? '<div class="warn-txt">Este tipo aún no tiene costos en la matriz. Agrégalos en “Matriz de costos” o escribe el costo a mano.</div>' : ''}`;
     }
     const foto = imgDe(it.imagen);
-    return `<div class="item ${foto ? 'con-img' : ''}" data-id="${it.id}">
-      ${foto ? `<img class="item-fondo" src="${foto}" alt="">` : ''}
+    return `<div class="item con-img" data-id="${it.id}">
+      ${foto ? `<img class="item-fondo" src="${foto}" alt="">`
+        : `<button type="button" class="item-fondo vacio" data-act="img" title="Agregar imagen">${ICONO_BANDERA}<span>Sin imagen</span><small>Agregar imagen</small></button>`}
       <div class="item-head">
         <span class="item-num">${i + 1}</span>
         <input class="item-nombre" data-f="titulo" value="${esc(it.titulo)}" placeholder="Nombre del producto (ej: Pabellón Nacional)">
@@ -624,10 +636,11 @@ function recalc() {
       <div class="stat ${c.margen < 0 ? 'bad' : 'hl'}"><small>Margen</small><b>${clp(c.margen)} · ${pct(c.margenPct)}</b></div>`;
   }
   const t = calcTotales(D);
+  renderDescuento(t);
   $('#totales').innerHTML = `
     <div class="stat"><small>Productos (neto)</small><b>${clp(t.ventaProductos)}</b></div>
     <div class="stat"><small>${t.despIncluido ? 'Despacho (incluido en precios)' : 'Despacho cobrado'}</small><b>${clp(t.despCobro)}</b></div>
-    <div class="stat"><small>Total neto</small><b>${clp(t.neto)}</b></div>
+    <div class="stat"><small>${t.descuento ? `Total neto (con −${pct(t.pctDesc / 100)})` : 'Total neto'}</small><b>${clp(t.neto)}</b></div>
     <div class="stat"><small>IVA 19%</small><b>${clp(t.iva)}</b></div>
     <div class="stat big"><small>Total bruto (cliente paga)</small><b>${clp(t.bruto)}</b></div>
     <div class="stat"><small>Costo total (incl. despacho)</small><b>${clp(t.costo)}</b></div>
@@ -635,6 +648,29 @@ function recalc() {
     <div class="stat ${t.margen < 0 ? 'bad' : 'hl'}"><small>Margen total %</small><b>${pct(t.margenPct)}</b></div>`;
   saveDraft();
 }
+
+function renderDescuento(t) {
+  const v = +D.descuento || 0, rapido = DESCUENTOS_RAPIDOS.includes(v);
+  const box = $('#chipsDesc');
+  if (!box.contains(document.activeElement)) {
+    box.innerHTML = `<button type="button" class="chip ${!v ? 'active' : ''}" data-desc="0">Sin descuento</button>` +
+      DESCUENTOS_RAPIDOS.map(x => `<button type="button" class="chip ${v === x ? 'active' : ''}" data-desc="${x}">${x}%</button>`).join('') +
+      `<span class="chip-input ${v && !rapido ? 'active' : ''}">otro <input type="number" min="0" max="90" step="0.5" data-desc-manual value="${v && !rapido ? v : ''}" placeholder="—">%</span>`;
+  }
+  $('#descInfo').innerHTML = t.descuento
+    ? `−${clp(t.descuento)} · margen baja de <b>${pct(t.margenSinDesc)}</b> a <b class="${t.margen < 0 ? 'neg' : ''}">${pct(t.margenPct)}</b>` : '';
+}
+$('#chipsDesc').addEventListener('click', e => {
+  if (e.target.dataset.desc == null) return;
+  D.descuento = +e.target.dataset.desc; $('#chipsDesc').innerHTML = ''; recalc();
+});
+$('#chipsDesc').addEventListener('input', e => {
+  if (!e.target.hasAttribute('data-desc-manual')) return;
+  D.descuento = Math.min(90, Math.max(0, num(e.target.value)));
+  $$('#chipsDesc .chip').forEach(c => c.classList.remove('active'));
+  e.target.parentElement.classList.toggle('active', e.target.value !== '');
+  recalc();
+});
 
 const itemDe = el => D.items.find(i => i.id === el.closest('.item')?.dataset.id);
 
@@ -645,6 +681,7 @@ $('#items').addEventListener('change', e => {
     return;
   }
   const it = itemDe(e.target); const f = e.target.dataset.f; if (!it || !f) return;
+  if (f === 'vaina') { it.vaina = e.target.value; saveDraft(); return; }
   if (f === 'tipo' || f === 'material' || f === 'medida') {
     it[f] = e.target.value;
     if (f === 'tipo') { it.material = ''; it.medida = '';
@@ -672,7 +709,7 @@ $('#items').addEventListener('input', e => {
 $('#items').addEventListener('click', e => {
   const it = itemDe(e.target); if (!it) return;
   if (e.target.dataset.m) { it.margen = +e.target.dataset.m; renderItems(); renderChipsGlobal(); }
-  const act = e.target.dataset.act;
+  const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'del') { D.items = D.items.filter(x => x !== it); renderItems(); renderChipsGlobal(); }
   if (act === 'dup') { const i = D.items.indexOf(it); D.items.splice(i + 1, 0, { ...it, id: uid() }); renderItems(); }
   if (act === 'img') e.target.closest('.item').querySelector('[data-file]').click();
@@ -733,7 +770,6 @@ $('#despIgualar').onclick = e => { e.preventDefault(); D.despacho.cobroManual = 
 $('#despModo').onchange = e => { D.despacho.modo = e.target.value; D.despacho.cobroManual = false; recalc(); };
 $('#despDestino').onchange = e => { D.despacho.destino = e.target.value; recalc(); };
 $('#despSecundaria').onchange = e => { D.despacho.secundaria = e.target.checked; recalc(); };
-$('#despMostrar').onchange = e => { D.despacho.mostrar = e.target.value; recalc(); };
 $('#despCalc').addEventListener('change', e => {
   const id = e.target.dataset.caja; if (!id) return;
   const m = {}; $$('#despCalc [data-caja]').forEach(i => m[i.dataset.caja] = Math.max(0, num(i.value)));
@@ -758,7 +794,7 @@ function validar() {
   if (sinPrecio) { toast('Hay un producto sin costo: revisa tipo, material y medida'); return false; }
   return true;
 }
-const firmaCot = c => JSON.stringify([c.cliente, c.items, c.condPago, c.plazo, c.validez, c.garantia, c.obs,
+const firmaCot = c => JSON.stringify([c.cliente, c.items, c.condPago, c.plazo, c.validez, c.garantia, c.obs, +c.descuento || 0,
   { ...c.despacho, calc: undefined }]);
 async function guardarCotizacion(opciones = {}) {
   if (!validar()) return null;
@@ -829,11 +865,12 @@ function htmlCotizacion(c) {
     const it = l.it, titulo = it.titulo || tituloAuto(it);
     return `<tr>
       <td class="n">${i + 1}</td>
-      <td class="desc ${imgDe(it.imagen) ? 'con-img' : ''}">${imgDe(it.imagen) ? `<img class="fondo" src="${imgDe(it.imagen)}" alt="">` : ''}
+      <td class="desc con-img">${imgDe(it.imagen) ? `<img class="fondo" src="${imgDe(it.imagen)}" alt="">`
+        : `<div class="fondo vacio">${ICONO_BANDERA}<span>Sin imagen</span></div>`}
         <div class="txt"><div class="tit">${esc(titulo)}</div>${it.obs ? `<div class="det">${br(it.obs)}</div>` : ''}</div></td>
       <td class="c">${medidaDoc(it.medida)}</td>
       <td class="c">${l.k.cant}</td>
-      <td class="c mat">${esc(materialDoc(it))}</td>
+      <td class="c mat">${esc(materialDoc(it))}${it.vaina && !it.libre ? `<div class="vaina">${esc(it.vaina)}</div>` : ''}</td>
       <td class="m">${clp(l.precioDoc)}</td>
       <td class="m b">${clp(l.totalDoc)}</td></tr>`;
   }).join('');
@@ -846,7 +883,8 @@ function htmlCotizacion(c) {
       <td class="c"></td><td class="c">1</td><td class="c"></td>
       <td class="m">${clp(t.despCobro)}</td><td class="m b">${clp(t.despCobro)}</td></tr>` : '';
   const textoDesp = d.modo === 'retiro' ? 'Retiro en nuestro taller (Viña del Mar)'
-    : t.despIncluido ? `Incluido · ${via}` : t.despEnLinea ? `${via} (ítem aparte)` : '';
+    : d.modo === 'sucursal' ? 'Gratis · retiro en sucursal Correos de Chile'
+    : d.modo === 'domicilio' ? 'Gratis · a domicilio' : 'Gratis';
   const plazo = esNumero(c.plazo)
     ? `${+c.plazo} días hábiles <span class="sub">(aprox. ${fechaCL(sumarDiasHabiles(c.fecha, +c.plazo))})</span>` : esc(c.plazo || '');
   const validez = esNumero(c.validez)
@@ -897,9 +935,12 @@ function htmlCotizacion(c) {
     <section class="cot-bottom">
       <div class="cot-notas">
         ${c.obs ? `<div class="cot-nota">${br(c.obs)}</div>` : ''}
+        ${d.modo !== 'retiro' ? `<div class="cot-gratis">${ICONO_CAMION}<span><b>Despacho gratis</b>${d.modo === 'sucursal' ? ' · retiro en sucursal Correos' : ' a domicilio'}</span></div>` : ''}
         <p class="cot-acepta">Para aceptar esta cotización, responda este correo o envíe su orden de compra indicando el N° ${c.numero ? numDoc(c) : 'de cotización'}.</p>
       </div>
       <table class="cot-tot">
+        ${t.descuento ? `<tr><td>Subtotal</td><td>${clp(t.subtotal)}</td></tr>
+        <tr class="dcto"><td>Descuento ${pct(t.pctDesc / 100)}</td><td>−${clp(t.descuento)}</td></tr>` : ''}
         <tr><td>Total neto</td><td>${clp(t.neto)}</td></tr>
         <tr><td>IVA 19%</td><td>${clp(t.iva)}</td></tr>
         <tr class="final"><td>Total</td><td>${clp(t.bruto)}</td></tr>
@@ -965,7 +1006,7 @@ $('#btnVistaCerrar').onclick = () => $('#dlgVista').close();
 async function imprimirOt(o) {
   await asegurarImagenes(o.items);
   const filas = o.items.map((it, i) => `<tr><td class="num">${i + 1}</td><td class="num">${+it.cantidad}</td>
-    <td>${esc(it.libre ? it.descripcion : it.tipo)}</td><td>${esc(it.libre ? '' : it.material)}</td><td>${esc(it.libre ? '' : it.medida)}</td>
+    <td>${esc(it.libre ? it.descripcion : it.tipo)}</td><td>${esc(it.libre ? '' : it.material)}${it.vaina && !it.libre ? '<br><small>' + esc(it.vaina) + '</small>' : ''}</td><td>${esc(it.libre ? '' : it.medida)}</td>
     <td>${imgDe(it.imagen) ? `<img src="${imgDe(it.imagen)}" style="height:60px;float:right;margin-left:8px;border-radius:4px">` : ''}${esc(it.obs)}</td><td style="width:60px"></td></tr>`).join('');
   imprimir(`<div class="doc">
     ${encabezado('ORDEN DE TRABAJO', o.numero, o.fecha)}
@@ -1040,7 +1081,7 @@ async function accionCot(a, id) {
       ot = { id: uid(), numero: null, fecha: hoy(), cotId: c.id, cotNumero: c.numero,
         cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
         despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
-        items: c.items.map(({ libre, tipo, material, medida, descripcion, titulo, cantidad, obs, imagen }) => ({ libre, tipo, material, medida, descripcion, titulo, cantidad, obs, imagen })),
+        items: c.items.map(({ libre, tipo, material, medida, vaina, descripcion, titulo, cantidad, obs, imagen }) => ({ libre, tipo, material, medida, vaina, descripcion, titulo, cantidad, obs, imagen })),
         estado: 'Pendiente' };
     }
     if (nubeActiva()) {

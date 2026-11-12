@@ -86,11 +86,6 @@
             <option value="retiro">Sin despacho · retira en taller</option>
           </select></label>
         <label data-solo-correos>Destino Correos<select id="despDestino"></select></label>
-        <label>En la cotización
-          <select id="despMostrar">
-            <option value="incluido">“Despacho incluido” (se reparte en los precios)</option>
-            <option value="linea">Como línea aparte</option>
-          </select></label>
         <label class="check" data-solo-correos><input type="checkbox" id="despSecundaria"> Zona secundaria (+20%)</label>
       </div>
       <div id="despCalc" class="desp-calc"></div>
@@ -99,11 +94,16 @@
         <label>Cobro al cliente (neto) <a href="#" id="despIgualar" class="mini">= costo</a><input data-money inputmode="numeric" id="despCobro"></label>
         <label>Detalle (opcional)<input id="despNota" placeholder="Ej: Correos de Chile a Punta Arenas"></label>
       </div>
-      <p class="hint">Tarifas Correos Paquete Express desde Valparaíso/Viña (oct. 2025). Se calcula para el pedido completo: cuántas cajas se usan y cuánto cobra Correos por todas. El despacho entra en el costo y en el margen total.</p>
+      <p class="hint">Tarifas Correos Paquete Express desde Valparaíso/Viña (oct. 2025). Se calcula para el pedido completo: cuántas cajas se usan y cuánto cobra Correos por todas. En la cotización el despacho no aparece como ítem: se reparte en los precios de las banderas y se muestra “Despacho gratis”.</p>
     </div>
 
     <div class="card resumen">
       <h2>Resumen</h2>
+      <div class="descuento">
+        <span class="lbl">Descuento al cliente <small>(sobre el precio de venta)</small></span>
+        <span class="chips" id="chipsDesc"></span>
+        <span id="descInfo" class="desc-info"></span>
+      </div>
       <div class="totales" id="totales"></div>
       <p class="hint">Costo y margen son internos: no aparecen en la cotización que recibe el cliente.</p>
       <div class="actions end resumen-acciones">
