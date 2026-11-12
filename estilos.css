@@ -482,3 +482,6 @@ table.editable input.n{max-width:80px;text-align:right}
 .ot-firmas span{height:30px}
 .ot-obs .lineas{height:40px}
 .ot-pie{margin-top:10px}
+/* OT: terminación en tipo oración, sin checklist ni firmas */
+.ot-specs .term b{text-transform:none;font-size:12px}
+.ot-pie{grid-template-columns:1fr}

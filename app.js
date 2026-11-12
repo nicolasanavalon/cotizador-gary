@@ -1084,7 +1084,6 @@ function htmlOt(o) {
         </div>
         ${it.obs ? `<div class="ot-det">${esc(textoCliente(it.obs))}</div>` : ''}
         ${it.notaTaller ? `<div class="ot-nota">⚠ ${esc(it.notaTaller)}</div>` : ''}
-        <div class="ot-check">${['Impreso / sublimado', 'Confección', 'Terminación', 'Revisado'].map(x => `<span>${caja(false)} ${x}</span>`).join('')}</div>
       </div>
     </article>`;
   }).join('');
@@ -1120,7 +1119,6 @@ function htmlOt(o) {
     <section class="ot-items">${filas}</section>
     <section class="ot-pie">
       <div class="ot-obs"><h5>Observaciones del taller</h5>${o.obsTaller ? `<p>${esc(o.obsTaller).replace(/\n/g, '<br>')}</p>` : '<div class="lineas"></div>'}</div>
-      <div class="ot-firmas">${['Entregado a producción', 'Terminado', 'Despachado'].map(x => `<div><span></span>${x}<small>Nombre y fecha</small></div>`).join('')}</div>
     </section>
   </div>`;
 }
