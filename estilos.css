@@ -334,3 +334,49 @@ table.editable input.n{max-width:80px;text-align:right}
 .desc-info{font-size:13px;color:var(--muted)}
 .desc-info b{color:var(--ink)}.desc-info b.neg{color:var(--red)}
 .cot-items td.desc.con-img .txt{max-width:calc(100% - 138px)}
+
+/* ===== Tarjeta de producto (ordenada) ===== */
+.item{padding:16px 18px}
+.item.con-img{padding-right:18px}
+.item-head{margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid rgba(0,0,0,.06)}
+.item.con-img .item-head{margin-right:0}
+.item-def{display:grid;grid-template-columns:1.05fr 1.6fr 1fr 1fr 1.35fr;gap:12px}
+.item-precio{display:grid;grid-template-columns:130px 190px 1fr;gap:12px;align-items:start;margin-top:12px}
+.item-def label,.item-precio label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
+.item-def label input{margin-top:4px}
+.item-def label.no-aplica select{background:#f1efea;color:#9a958a;border-style:dashed}
+.item .nota{font-weight:500;font-size:11px;color:var(--muted)}
+.item .nota a{color:var(--accent-d);font-weight:700}
+.item-margen{margin-top:0;align-self:end;padding-bottom:4px}
+.item-margen .lbl{font-size:12px;font-weight:600;margin-right:4px}
+.item-res{margin-top:14px}
+.item-desc{margin-top:12px}
+@media(max-width:1000px){.item-def{grid-template-columns:1fr 1fr}.item-def label:nth-child(2){grid-column:span 1}}
+@media(max-width:700px){.item-def,.item-precio{grid-template-columns:1fr}}
+
+/* Imagen de fondo bonita: bandera completa a la derecha, se funde hacia la izquierda; controles translúcidos */
+.item.con-foto{background:#fff}
+.item.con-foto .item-fondo{position:absolute;inset:auto;top:0;right:0;bottom:0;height:100%;width:auto;max-width:62%;min-width:0;
+  object-fit:contain;object-position:right center;opacity:.9;border:0;border-radius:0;box-shadow:none;background:none;margin:0;
+  -webkit-mask-image:linear-gradient(to left,#000 0%,rgba(0,0,0,.85) 35%,rgba(0,0,0,.25) 75%,transparent 100%);
+  mask-image:linear-gradient(to left,#000 0%,rgba(0,0,0,.85) 35%,rgba(0,0,0,.25) 75%,transparent 100%)}
+.item.con-foto :is(input:not([type=file]),select,textarea){background:rgba(255,255,255,.84);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.item.con-foto .stat{background:rgba(255,255,255,.86);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.item.con-foto .stat.hl{background:rgba(229,244,236,.9)}
+.item.con-foto .chip{background:rgba(255,255,255,.88)}
+.item.con-foto .chip.active{background:var(--blue)}
+.item.con-foto .btn.ghost{background:rgba(255,255,255,.85)}
+.item.con-foto label,.item.con-foto .item-margen .lbl,.item.con-foto .nota{text-shadow:0 0 4px #fff,0 0 8px #fff}
+.item.con-foto .item-head{border-bottom-color:rgba(255,255,255,.6)}
+/* Sin imagen: marca de agua suave */
+.item-marca{position:absolute;right:22px;bottom:18px;display:flex;flex-direction:column;align-items:center;gap:4px;color:#e4dfd3;pointer-events:none}
+.item-marca svg{width:120px;height:120px;stroke-width:1.4}
+.item-marca span{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#d9d3c4}
+@media(max-width:700px){.item.con-foto .item-fondo{max-width:100%;opacity:.35}.item-marca svg{width:70px;height:70px}}
+.item > .item-marca{position:absolute;z-index:0}
+.item > .item-fondo{z-index:0}
+.sin-img{display:inline-flex;align-items:center;gap:6px;border:1.5px dashed #d3cbb9;border-radius:8px;padding:3px 10px 3px 6px;cursor:pointer;
+  font:inherit;font-size:12px;color:#a79e8b;background:repeating-linear-gradient(135deg,#fbfaf6 0 6px,#f4f1e9 6px 12px)}
+.sin-img svg{width:20px;height:20px}
+.sin-img b{color:var(--accent-d);font-weight:700}
+.sin-img:hover{border-color:var(--accent)}

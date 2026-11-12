@@ -20,7 +20,8 @@ const TIPOS_DEF = [
   'Bandera especial (c/estrellas, Magallanes, Viña, etc.)',
 ];
 const MATERIALES_DEF = ['Raso', 'Bistrech', 'Microperforado', 'Oxford', 'Raquelado'];
-const VAINAS = ['Wincha poliéster y argollas', 'Vaina de lona', 'Vaina de lona con driza incorporada'];
+const VAINAS = ['Huincha poliéster y argollas', 'Vaina de lona', 'Vaina de lona con driza incorporada', 'Vaina de lona con ojetillos'];
+const PRODUCTOS = ['Bandera', 'Bandera de escritorio', 'Mantel', 'Asta de escritorio', 'Otro'];
 const DESCUENTOS_RAPIDOS = [5, 10, 15];
 const ICONO_CAMION = '<svg viewBox="0 0 48 48" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h24v20H4z"/><path d="M28 19h8l7 7v6h-15z"/><circle cx="13" cy="35" r="4"/><circle cx="35" cy="35" r="4"/></svg>';
 const ICONO_BANDERA = '<svg viewBox="0 0 48 48" width="38" height="38" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 44V5"/><path d="M11 7c6-3 11 3 17 0s9-2 12 0v18c-3-2-6-3-12 0s-11-3-17 0"/></svg>';
@@ -55,7 +56,7 @@ const CONFIG_DEF = {
 
 /* Matriz de EJEMPLO: costo ≈ área × $/m² del material × factor del tipo + base. */
 function matrizEjemplo() {
-  const medidas = ['0,90 x 0,60', '1,35 x 0,90', '1,80 x 1,20', '2,25 x 1,50', '3,00 x 2,00'];
+  const medidas = ['0,90 x 0,60', '1,35 x 0,90', '1,50 x 1,00', '1,80 x 1,20', '2,25 x 1,50', '3,00 x 2,00'];
   const m2 = { 'Raso': 6500, 'Bistrech': 4200, 'Microperforado': 5200, 'Oxford': 5600, 'Raquelado': 4800 };
   const tipos = [
     [TIPOS_DEF[0], ['Raso', 'Bistrech', 'Oxford'], 1.6, 3500],
@@ -121,7 +122,7 @@ function textoPlazo(c, desde) {
 }
 function textoValidez(c) {
   if (!esNumero(c.validez)) return c.validez || '';
-  return `${+c.validez} días (hasta el ${fechaCL(sumarDias(c.fecha, +c.validez))})`;
+  return `${+c.validez} días hábiles (hasta el ${fechaCL(sumarDiasHabiles(c.fecha, +c.validez))})`;
 }
 
 function areaDe(medida) {
@@ -400,7 +401,8 @@ function nuevoBorrador() {
   };
 }
 function nuevoItem(libre = false) {
-  return { id: uid(), libre, tipo: '', material: '', medida: '', vaina: '', descripcion: '', titulo: '', cantidad: 1, costo: 0, margen: +CFG.margenDef || 40, obs: '' };
+  return { id: uid(), producto: 'Bandera', productoOtro: '', tipo: '', material: '', materialOtro: '', medida: '', medidaOtra: '',
+    vaina: '', descripcion: '', titulo: '', costoManual: false, cantidad: 1, costo: 0, margen: +CFG.margenDef || 40, obs: '' };
 }
 
 /* ---------------- Cálculos ---------------- */
@@ -456,8 +458,8 @@ const numDoc = c => c.numero ? c.numero + (c.version ? '-' + c.version : '') : '
 /* ---------------- Despacho (Correos) ---------------- */
 function destinoEfectivo(d) { return d.despacho.destino || Envio.destinoDe(d.cliente.region, d.cliente.comuna); }
 function piezasEnvio(d) {
-  return d.items.filter(i => !i.libre && i.medida && +i.cantidad > 0)
-    .map(i => ({ medida: i.medida, area: areaDe(i.medida), cantidad: +i.cantidad }));
+  return d.items.map(normalizarItem).filter(i => medidaEf(i) && areaDe(medidaEf(i)) > 0 && +i.cantidad > 0)
+    .map(i => ({ medida: medidaEf(i), area: areaDe(medidaEf(i)), cantidad: +i.cantidad }));
 }
 /* Recalcula el costo del despacho de la cotización en edición. */
 function actualizarDespacho() {
@@ -497,18 +499,31 @@ function renderDespacho() {
     <div class="manual">${ds.manual ? 'Cajas a mano:' : 'Ajustar cajas:'} ${man}
       ${ds.manual ? '<a href="#" class="mini" data-caja-auto>volver a cálculo automático</a>' : ''}</div>`;
 }
+/* Cotizaciones antiguas: "ítem libre" pasa a producto "Otro"; Wincha → Huincha. */
+function normalizarItem(it) {
+  if (it.libre) { it.producto = 'Otro'; it.productoOtro = it.productoOtro || it.descripcion || ''; delete it.libre; }
+  if (!it.producto) it.producto = 'Bandera';
+  if (it.vaina === 'Wincha poliéster y argollas') it.vaina = 'Huincha poliéster y argollas';
+  return it;
+}
+const esBandera = it => (it.producto || 'Bandera') === 'Bandera';
+const productoEf = it => it.producto === 'Otro' ? (it.productoOtro || '') : (it.producto || 'Bandera');
+const materialEf = it => it.material === 'Otro' ? (it.materialOtro || '') : (it.material || '');
+const medidaEf = it => it.medida === 'Otra' ? normMedida(it.medidaOtra || '') : (it.medida || '');
 function tituloAuto(it) {
-  if (it.libre) return it.descripcion || '';
+  if (!esBandera(it)) return productoEf(it);
   return String(it.tipo || '').replace(/\s*\d\/Faz/i, '').replace(/\s*\(.*?\)/, '').trim();
 }
+function actualizarTituloAuto(it) {
+  if (!it.titulo || it.titulo === it._tituloAuto) { it.titulo = tituloAuto(it); it._tituloAuto = it.titulo; }
+}
 function materialDoc(it) {
-  if (it.libre) return '';
-  const faz = /2\/Faz/i.test(it.tipo) ? ' doble faz' : '';
-  return (it.material || '') + faz;
+  const faz = esBandera(it) && /2\/Faz/i.test(it.tipo) ? ' doble faz' : '';
+  return materialEf(it) + (materialEf(it) ? faz : '');
 }
 function descItem(it) {
-  if (it.libre) return it.descripcion || 'Ítem';
-  return [it.tipo, it.material, it.medida ? it.medida + ' m' : ''].filter(Boolean).join(' · ');
+  normalizarItem(it);
+  return [esBandera(it) ? it.tipo : productoEf(it), materialEf(it), medidaEf(it) ? medidaEf(it) + ' m' : ''].filter(Boolean).join(' · ');
 }
 
 /* ---------------- Navegación ---------------- */
@@ -550,7 +565,7 @@ function renderEditor() {
 }
 function renderFechas() {
   $('#fechaPlazo').textContent = esNumero(D.plazo) ? '→ ' + fechaLarga(sumarDiasHabiles(D.fecha, +D.plazo)) : '';
-  $('#fechaValidez').textContent = esNumero(D.validez) ? '→ hasta ' + fechaLarga(sumarDias(D.fecha, +D.validez)) : '';
+  $('#fechaValidez').textContent = esNumero(D.validez) ? '→ hasta ' + fechaLarga(sumarDiasHabiles(D.fecha, +D.validez)) : '';
 }
 function renderChipsGlobal() {
   const ms = [...new Set(D.items.map(i => +i.margen))];
@@ -567,58 +582,77 @@ function opcionesMedida(tipo, mat) {
     .sort((a, b) => areaDe(a.medida) - areaDe(b.medida)).map(r => r.medida);
 }
 function costoMatriz(it) {
+  if (!esBandera(it) || !it.tipo || it.material === 'Otro' || it.medida === 'Otra') return null;
   const r = MATRIZ.find(r => r.tipo === it.tipo && r.material === it.material && r.medida === it.medida);
   return r ? +r.costo : null;
 }
 const opt = (v, sel, label) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(label ?? v)}</option>`;
 
+function opcionesMaterialItem(it) {
+  const deMatriz = esBandera(it) && it.tipo ? opcionesMaterial(it.tipo) : [];
+  return { deMatriz, resto: CFG.materiales.filter(m => !deMatriz.includes(m)) };
+}
+function opcionesMedidaItem(it) {
+  const deMatriz = esBandera(it) && it.tipo && it.material && it.material !== 'Otro' ? opcionesMedida(it.tipo, it.material) : [];
+  const todas = [...new Set(MATRIZ.map(r => r.medida))].sort((a, b) => areaDe(a) - areaDe(b));
+  return { deMatriz, resto: todas.filter(m => !deMatriz.includes(m)) };
+}
+function selectGrupos(campo, valor, deMatriz, resto, otro, extra = '') {
+  const g = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(x => opt(x, valor)).join('')}</optgroup>` : '';
+  const conocido = !valor || valor === otro || deMatriz.includes(valor) || resto.includes(valor);
+  return `<select data-f="${campo}" ${extra}><option value="">Elegir…</option>
+    ${deMatriz.length ? g('Con costo en la matriz', deMatriz) + g('Otros', resto) : resto.map(x => opt(x, valor)).join('')}
+    ${conocido ? '' : opt(valor, valor)}<option value="${otro}" ${valor === otro ? 'selected' : ''}>${otro}… (escribir)</option></select>`;
+}
 function renderItems() {
   $('#items').innerHTML = D.items.map((it, i) => {
-    let campos;
-    if (it.libre) {
-      campos = `<div class="item-grid libre">
-        <label>Descripción<input data-f="descripcion" value="${esc(it.descripcion)}" placeholder="Ej: Mástil de aluminio 3 m"></label>
-        <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
-        <label>Costo unitario neto<input data-money inputmode="numeric" data-f="costo" value="${miles(it.costo)}"></label>
-      </div>`;
-    } else {
-      const mats = it.tipo ? opcionesMaterial(it.tipo) : [];
-      const meds = it.tipo && it.material ? opcionesMedida(it.tipo, it.material) : [];
-      const cm = costoMatriz(it);
-      const modificado = cm != null && +it.costo !== cm;
-      campos = `<div class="item-grid">
-        <label>Tipo de bandera<select data-f="tipo"><option value="">Elegir…</option>${opcionesTipo().map(t => opt(t, it.tipo)).join('')}</select></label>
-        <label>Material<select data-f="material" ${it.tipo ? '' : 'disabled'}><option value="">Elegir…</option>${mats.map(m => opt(m, it.material)).join('')}</select></label>
-        <label>Medida (m)<select data-f="medida" ${it.material ? '' : 'disabled'}><option value="">Elegir…</option>${meds.map(m => opt(m, it.medida)).join('')}</select></label>
-        <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
-        <label>Costo unit. neto${modificado ? ' <span title="Distinto a la matriz">✎</span>' : ''}<input data-money inputmode="numeric" data-f="costo" value="${miles(it.costo)}"></label>
-      </div>
-      <div class="item-grid vaina">
-        <label>Terminación<select data-f="vaina"><option value="">Elegir…</option>${VAINAS.concat(it.vaina && !VAINAS.includes(it.vaina) ? [it.vaina] : []).map(v => opt(v, it.vaina)).join('')}</select></label>
-      </div>
-      ${it.tipo && !mats.length ? '<div class="warn-txt">Este tipo aún no tiene costos en la matriz. Agrégalos en “Matriz de costos” o escribe el costo a mano.</div>' : ''}`;
-    }
-    const foto = imgDe(it.imagen);
-    return `<div class="item con-img" data-id="${it.id}">
-      ${foto ? `<img class="item-fondo" src="${foto}" alt="">`
-        : `<button type="button" class="item-fondo vacio" data-act="img" title="Agregar imagen">${ICONO_BANDERA}<span>Sin imagen</span><small>Agregar imagen</small></button>`}
+    normalizarItem(it);
+    const band = esBandera(it), foto = imgDe(it.imagen), cm = costoMatriz(it);
+    const mats = opcionesMaterialItem(it), meds = opcionesMedidaItem(it);
+    const notaCosto = cm != null
+      ? (it.costoManual && +it.costo !== cm ? `✎ a mano · <a href="#" data-act="matriz">usar matriz (${clp(cm)})</a>` : 'de la matriz de costos')
+      : (band && !it.tipo ? 'elige el tipo para traerlo de la matriz' : 'escríbelo a mano');
+    return `<div class="item ${foto ? 'con-foto' : 'sin-foto'}" data-id="${it.id}">
+      ${foto ? `<img class="item-fondo" src="${foto}" alt="">` : ''}
       <div class="item-head">
         <span class="item-num">${i + 1}</span>
         <input class="item-nombre" data-f="titulo" value="${esc(it.titulo)}" placeholder="Nombre del producto (ej: Pabellón Nacional)">
         <span class="item-acc">
           <input type="file" accept="image/*,.svg,image/svg+xml,.pdf,application/pdf,.ai" data-file hidden>
-          <button class="btn sm ghost" data-act="img">${foto ? 'Cambiar imagen' : '＋ Imagen'}</button>
+          ${foto ? '<button class="btn sm ghost" data-act="img">Cambiar imagen</button>'
+            : `<button class="sin-img" data-act="img" title="Agregar imagen">${ICONO_BANDERA}<span>Sin imagen</span><b>＋ Agregar</b></button>`}
           ${it.imagen ? '<button class="btn sm ghost" data-act="sinimg">Quitar imagen</button>' : ''}
           <button class="btn sm ghost" data-act="dup">Duplicar</button>
-          <button class="btn sm ghost danger" data-act="del">Quitar</button></span></div>
-      ${campos}
-      <div class="item-margen">Margen: <span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>
+          <button class="btn sm ghost danger" data-act="del">Quitar</button></span>
+      </div>
+      <div class="item-def">
+        <label>Producto
+          <select data-f="producto">${PRODUCTOS.map(p => opt(p, it.producto)).join('')}</select>
+          ${it.producto === 'Otro' ? `<input data-f="productoOtro" value="${esc(it.productoOtro)}" placeholder="¿Qué producto? (ej: mástil 6 m)">` : ''}</label>
+        <label class="${band ? '' : 'no-aplica'}">Tipo de bandera
+          ${band ? `<select data-f="tipo"><option value="">Elegir…</option>${opcionesTipo().map(t => opt(t, it.tipo)).join('')}</select>
+            ${!it.tipo ? '<small class="nota">Elige el tipo para traer el costo de la matriz</small>' : ''}`
+          : `<select disabled><option>No aplica</option></select><small class="nota">Solo se llena cuando el producto es “Bandera”</small>`}</label>
+        <label>Material
+          ${selectGrupos('material', it.material, mats.deMatriz, mats.resto, 'Otro')}
+          ${it.material === 'Otro' ? `<input data-f="materialOtro" value="${esc(it.materialOtro)}" placeholder="¿Qué material?">` : ''}</label>
+        <label>Medida (m)
+          ${selectGrupos('medida', it.medida, meds.deMatriz, meds.resto, 'Otra')}
+          ${it.medida === 'Otra' ? `<input data-f="medidaOtra" value="${esc(it.medidaOtra)}" placeholder="Ej: 1,50 x 1,00">` : ''}</label>
+        <label>Terminación
+          <select data-f="vaina"><option value="">Elegir…</option>${VAINAS.concat(it.vaina && !VAINAS.includes(it.vaina) ? [it.vaina] : []).map(v => opt(v, it.vaina)).join('')}</select></label>
+      </div>
+      <div class="item-precio">
+        <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
+        <label>Costo unit. neto<input data-money inputmode="numeric" data-f="costo" value="${miles(it.costo)}"><small class="nota">${notaCosto}</small></label>
+        <div class="item-margen"><span class="lbl">Margen</span><span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>
+      </div>
       <div class="item-res" data-res></div>
       <div class="item-desc">
-        <textarea data-f="obs" rows="2" placeholder="Descripción para el cliente (sale en la cotización y en la OT): diseño, terminaciones, vaina, flecos, etc.">${esc(it.obs)}</textarea>
+        <textarea data-f="obs" rows="2" placeholder="Descripción para el cliente (sale en la cotización y en la OT): diseño, colores, escudo, flecos, etc.">${esc(it.obs)}</textarea>
       </div>
     </div>`;
-  }).join('') || '<div class="empty">Sin productos. Agrega una bandera.</div>';
+  }).join('') || '<div class="empty">Sin productos. Agrega uno.</div>';
   recalc();
 }
 
@@ -674,6 +708,7 @@ $('#chipsDesc').addEventListener('input', e => {
 
 const itemDe = el => D.items.find(i => i.id === el.closest('.item')?.dataset.id);
 
+const CAMPOS_DEF = ['producto', 'tipo', 'material', 'medida'];
 $('#items').addEventListener('change', e => {
   if (e.target.matches('[data-file]')) {
     const it = itemDe(e.target), file = e.target.files[0];
@@ -682,21 +717,36 @@ $('#items').addEventListener('change', e => {
   }
   const it = itemDe(e.target); const f = e.target.dataset.f; if (!it || !f) return;
   if (f === 'vaina') { it.vaina = e.target.value; saveDraft(); return; }
-  if (f === 'tipo' || f === 'material' || f === 'medida') {
-    it[f] = e.target.value;
-    if (f === 'tipo') { it.material = ''; it.medida = '';
-      if (!it.titulo || it.titulo === it._tituloAuto) { it.titulo = tituloAuto(it); it._tituloAuto = it.titulo; }
-      const mats = opcionesMaterial(it.tipo); if (mats.length === 1) it.material = mats[0]; }
-    if (f !== 'medida') { const meds = it.material ? opcionesMedida(it.tipo, it.material) : [];
-      if (!meds.includes(it.medida)) it.medida = meds.length === 1 ? meds[0] : ''; }
-    const cm = costoMatriz(it); it.costo = cm ?? 0;
-    renderItems();
+  if (f === 'medidaOtra') { it.medidaOtra = normMedida(e.target.value); e.target.value = it.medidaOtra; recalc(); return; }
+  if (!CAMPOS_DEF.includes(f)) return;
+  it[f] = e.target.value;
+  if (f === 'producto') { if (!esBandera(it)) it.tipo = ''; actualizarTituloAuto(it); }
+  if (f === 'tipo') {
+    const ms = opcionesMaterial(it.tipo);
+    if (it.material !== 'Otro' && ms.length && !ms.includes(it.material)) it.material = ms.length === 1 ? ms[0] : '';
+    actualizarTituloAuto(it);
   }
+  if (f === 'tipo' || f === 'material') {
+    const ds = esBandera(it) && it.tipo && it.material && it.material !== 'Otro' ? opcionesMedida(it.tipo, it.material) : [];
+    if (ds.length && it.medida !== 'Otra' && !ds.includes(it.medida)) it.medida = ds.length === 1 ? ds[0] : '';
+  }
+  const cm = costoMatriz(it);
+  if (cm != null) { it.costo = cm; it.costoManual = false; }
+  renderItems();
 });
 $('#items').addEventListener('input', e => {
   const it = itemDe(e.target); if (!it) return;
   const f = e.target.dataset.f;
-  if (f === 'cantidad' || f === 'costo') { it[f] = num(e.target.value); recalc(); }
+  if (f === 'cantidad') { it.cantidad = num(e.target.value); recalc(); }
+  else if (f === 'costo') { it.costo = num(e.target.value); it.costoManual = true; recalc(); }
+  else if (f === 'productoOtro') {
+    it.productoOtro = e.target.value;
+    const antes = it.titulo; actualizarTituloAuto(it);
+    if (it.titulo !== antes) e.target.closest('.item').querySelector('.item-nombre').value = it.titulo;
+    saveDraft();
+  }
+  else if (f === 'materialOtro') { it.materialOtro = e.target.value; saveDraft(); }
+  else if (f === 'medidaOtra') { it.medidaOtra = e.target.value; saveDraft(); }
   else if (f === 'descripcion' || f === 'obs' || f === 'titulo') { it[f] = e.target.value; saveDraft(); }
   else if (e.target.hasAttribute('data-m-manual')) {
     it.margen = num(e.target.value);
@@ -714,6 +764,7 @@ $('#items').addEventListener('click', e => {
   if (act === 'dup') { const i = D.items.indexOf(it); D.items.splice(i + 1, 0, { ...it, id: uid() }); renderItems(); }
   if (act === 'img') e.target.closest('.item').querySelector('[data-file]').click();
   if (act === 'sinimg') { it.imagen = null; renderItems(); }
+  if (act === 'matriz') { e.preventDefault(); it.costo = costoMatriz(it) ?? it.costo; it.costoManual = false; renderItems(); }
 });
 $('#chipsGlobal').addEventListener('click', e => {
   if (!e.target.dataset.mg) return;
@@ -725,7 +776,6 @@ $('#chipsGlobal').addEventListener('change', e => {
 });
 
 $('#btnAddItem').onclick = () => { D.items.push(nuevoItem()); renderItems(); };
-$('#btnAddLibre').onclick = () => { D.items.push(nuevoItem(true)); renderItems(); };
 $$('[data-c]').forEach(i => i.oninput = () => { D.cliente[i.dataset.c] = i.value; saveDraft();
   if (i.dataset.c === 'comuna') recalc(); });
 $$('[data-d]').forEach(i => i.oninput = () => { D[i.dataset.d] = i.value; saveDraft(); renderFechas(); });
@@ -862,15 +912,15 @@ function htmlCotizacion(c) {
   const br = s => esc(s).replace(/\n/g, '<br>');
   const medidaDoc = m => esc(String(m || '').replace(/\s*x\s*/i, ' × '));
   const filas = t.lineas.map((l, i) => {
-    const it = l.it, titulo = it.titulo || tituloAuto(it);
+    const it = normalizarItem(l.it), titulo = it.titulo || tituloAuto(it);
     return `<tr>
       <td class="n">${i + 1}</td>
       <td class="desc con-img">${imgDe(it.imagen) ? `<img class="fondo" src="${imgDe(it.imagen)}" alt="">`
         : `<div class="fondo vacio">${ICONO_BANDERA}<span>Sin imagen</span></div>`}
         <div class="txt"><div class="tit">${esc(titulo)}</div>${it.obs ? `<div class="det">${br(it.obs)}</div>` : ''}</div></td>
-      <td class="c">${medidaDoc(it.medida)}</td>
+      <td class="c">${medidaDoc(medidaEf(it))}</td>
       <td class="c">${l.k.cant}</td>
-      <td class="c mat">${esc(materialDoc(it))}${it.vaina && !it.libre ? `<div class="vaina">${esc(it.vaina)}</div>` : ''}</td>
+      <td class="c mat">${esc(materialDoc(it))}${it.vaina ? `<div class="vaina">${esc(it.vaina)}</div>` : ''}</td>
       <td class="m">${clp(l.precioDoc)}</td>
       <td class="m b">${clp(l.totalDoc)}</td></tr>`;
   }).join('');
@@ -888,7 +938,7 @@ function htmlCotizacion(c) {
   const plazo = esNumero(c.plazo)
     ? `${+c.plazo} días hábiles <span class="sub">(aprox. ${fechaCL(sumarDiasHabiles(c.fecha, +c.plazo))})</span>` : esc(c.plazo || '');
   const validez = esNumero(c.validez)
-    ? `${+c.validez} días <span class="sub">(hasta ${fechaCL(sumarDias(c.fecha, +c.validez))})</span>` : esc(c.validez || '');
+    ? `${+c.validez} días hábiles <span class="sub">(hasta ${fechaCL(sumarDiasHabiles(c.fecha, +c.validez))})</span>` : esc(c.validez || '');
   const fila = (k, v) => v ? `<div class="kv"><span>${k}</span><b>${v}</b></div>` : '';
   const contactos = String(CFG.contactos || '').split('\n').map(s => s.trim()).filter(Boolean);
   const num = c.numero ? numDoc(c) : '<span class="borrador">borrador</span>';
@@ -1006,7 +1056,7 @@ $('#btnVistaCerrar').onclick = () => $('#dlgVista').close();
 async function imprimirOt(o) {
   await asegurarImagenes(o.items);
   const filas = o.items.map((it, i) => `<tr><td class="num">${i + 1}</td><td class="num">${+it.cantidad}</td>
-    <td>${esc(it.libre ? it.descripcion : it.tipo)}</td><td>${esc(it.libre ? '' : it.material)}${it.vaina && !it.libre ? '<br><small>' + esc(it.vaina) + '</small>' : ''}</td><td>${esc(it.libre ? '' : it.medida)}</td>
+    <td>${esc((normalizarItem(it), it.titulo || (esBandera(it) ? it.tipo : productoEf(it))))}${esBandera(it) && it.tipo && it.titulo ? '<br><small>' + esc(it.tipo) + '</small>' : ''}</td><td>${esc(materialEf(it))}${it.vaina ? '<br><small>' + esc(it.vaina) + '</small>' : ''}</td><td>${esc(medidaEf(it))}</td>
     <td>${imgDe(it.imagen) ? `<img src="${imgDe(it.imagen)}" style="height:60px;float:right;margin-left:8px;border-radius:4px">` : ''}${esc(it.obs)}</td><td style="width:60px"></td></tr>`).join('');
   imprimir(`<div class="doc">
     ${encabezado('ORDEN DE TRABAJO', o.numero, o.fecha)}
@@ -1081,7 +1131,8 @@ async function accionCot(a, id) {
       ot = { id: uid(), numero: null, fecha: hoy(), cotId: c.id, cotNumero: c.numero,
         cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
         despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
-        items: c.items.map(({ libre, tipo, material, medida, vaina, descripcion, titulo, cantidad, obs, imagen }) => ({ libre, tipo, material, medida, vaina, descripcion, titulo, cantidad, obs, imagen })),
+        items: c.items.map(x => normalizarItem({ ...x })).map(({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen }) =>
+          ({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen })),
         estado: 'Pendiente' };
     }
     if (nubeActiva()) {

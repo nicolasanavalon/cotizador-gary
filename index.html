@@ -52,7 +52,7 @@
           <label class="wide">Condición de pago<select data-d="condPago" data-condpago></select></label>
           <label>Plazo de entrega (días hábiles)
             <span class="dias"><input type="number" min="0" data-d="plazo"><span class="fecha-calc" id="fechaPlazo"></span></span></label>
-          <label>Validez de la oferta (días)
+          <label>Validez de la oferta (días hábiles)
             <span class="dias"><input type="number" min="0" data-d="validez"><span class="fecha-calc" id="fechaValidez"></span></span></label>
           <label>Garantía confección<input data-d="garantia" placeholder="Ej: 6 meses"></label>
           <label class="wide">Nota destacada al pie (sale en la cotización)<textarea data-d="obs" rows="2" placeholder="Ej: Imagen de cargo institucional – color institucional azul Francia"></textarea></label>
@@ -70,8 +70,7 @@
       </div>
       <div id="items"></div>
       <div class="add-row">
-        <button class="btn" id="btnAddItem">+ Agregar bandera</button>
-        <button class="btn ghost" id="btnAddLibre">+ Ítem libre</button>
+        <button class="btn" id="btnAddItem">+ Agregar producto</button>
       </div>
     </div>
 
@@ -178,7 +177,7 @@
         <div class="fields">
           <label>Condición de pago por defecto<select data-cfg="condPago" data-condpago></select></label>
           <label>Plazo de entrega por defecto (días hábiles, vacío = en blanco)<input type="number" min="0" data-cfg="plazo"></label>
-          <label>Validez por defecto (días, vacío = en blanco)<input type="number" min="0" data-cfg="validez"></label>
+          <label>Validez por defecto (días hábiles, vacío = en blanco)<input type="number" min="0" data-cfg="validez"></label>
           <label>Garantía confección por defecto<input data-cfg="garantia"></label>
           <label>Margen por defecto (%)<input type="number" data-cfg="margenDef"></label>
           <label>Redondear precio unitario hacia arriba a
