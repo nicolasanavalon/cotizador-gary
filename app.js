@@ -474,17 +474,16 @@ function actualizarDespacho() {
       ds.calc = { ...r, destino, servicio: ds.modo };
       ds.costo = r.costo;
     }
-    if (!ds.cobroManual) ds.cobro = ds.costo;
   } else if (ds.modo === 'retiro') {
-    ds.costo = 0; if (!ds.cobroManual) ds.cobro = 0;
+    ds.costo = 0;
   }
+  ds.cobro = ds.costo; ds.cobroManual = false;   // al cliente se le cobra lo que cuesta (repartido en los precios)
 }
 function renderDespacho() {
   const ds = D.despacho, correos = ds.modo === 'domicilio' || ds.modo === 'sucursal';
   $$('[data-solo-correos]').forEach(e => e.style.display = correos ? '' : 'none');
-  $('#despCosto').readOnly = correos || ds.modo === 'retiro';
+  $('#despManualBox').style.display = ds.modo === 'manual' ? '' : 'none';
   if (document.activeElement !== $('#despCosto')) $('#despCosto').value = miles(ds.costo);
-  if (document.activeElement !== $('#despCobro')) $('#despCobro').value = miles(ds.cobro);
   const auto = Envio.destinoDe(D.cliente.region, D.cliente.comuna);
   $('#despDestino').innerHTML = `<option value="">${auto ? 'Automático: ' + esc(auto) : 'Automático (elige región)'}</option>` +
     Envio.DESTINOS.map(x => opt(x, ds.destino)).join('');
@@ -558,7 +557,6 @@ function renderEditor() {
   if (!ds.mostrar) ds.mostrar = 'linea';
   $('#despModo').value = ds.modo;
   $('#despSecundaria').checked = !!ds.secundaria;
-  $('#despNota').value = ds.nota || '';
   renderFechas();
   renderChipsGlobal();
   renderItems();
@@ -809,14 +807,7 @@ document.addEventListener('input', e => {
   try { inp.setSelectionRange(p, p); } catch (_) {}
   marcarRut(inp);
 }, true);
-$('#despCosto').oninput = e => {
-  if (e.target.readOnly) return;
-  const nuevo = num(e.target.value);
-  if (!D.despacho.cobroManual) D.despacho.cobro = nuevo;
-  D.despacho.costo = nuevo; recalc();
-};
-$('#despCobro').oninput = e => { D.despacho.cobro = num(e.target.value); D.despacho.cobroManual = true; recalc(); };
-$('#despIgualar').onclick = e => { e.preventDefault(); D.despacho.cobroManual = false; D.despacho.cobro = D.despacho.costo; recalc(); };
+$('#despCosto').oninput = e => { D.despacho.costo = num(e.target.value); recalc(); };
 $('#despModo').onchange = e => { D.despacho.modo = e.target.value; D.despacho.cobroManual = false; recalc(); };
 $('#despDestino').onchange = e => { D.despacho.destino = e.target.value; recalc(); };
 $('#despSecundaria').onchange = e => { D.despacho.secundaria = e.target.checked; recalc(); };
@@ -829,7 +820,6 @@ $('#despCalc').addEventListener('click', e => {
   if (!e.target.hasAttribute('data-caja-auto')) return;
   e.preventDefault(); D.despacho.manual = null; recalc();
 });
-$('#despNota').oninput = e => { D.despacho.nota = e.target.value; saveDraft(); };
 
 $('#btnNueva').onclick = () => {
   if (D.items.some(i => i.costo) && !D.id && !confirm('¿Descartar la cotización que estás armando?')) return;

@@ -88,10 +88,8 @@
         <label class="check" data-solo-correos><input type="checkbox" id="despSecundaria"> Zona secundaria (+20%)</label>
       </div>
       <div id="despCalc" class="desp-calc"></div>
-      <div class="fields three">
-        <label>Costo para nosotros (neto)<input data-money inputmode="numeric" id="despCosto"></label>
-        <label>Cobro al cliente (neto) <a href="#" id="despIgualar" class="mini">= costo</a><input data-money inputmode="numeric" id="despCobro"></label>
-        <label>Detalle (opcional)<input id="despNota" placeholder="Ej: Correos de Chile a Punta Arenas"></label>
+      <div class="fields three" id="despManualBox">
+        <label>Costo del transporte (neto)<input data-money inputmode="numeric" id="despCosto"></label>
       </div>
       <p class="hint">Tarifas Correos Paquete Express desde Valparaíso/Viña (oct. 2025). Se calcula para el pedido completo: cuántas cajas se usan y cuánto cobra Correos por todas. En la cotización el despacho no aparece como ítem: se reparte en los precios de las banderas y se muestra “Despacho gratis”.</p>
     </div>
