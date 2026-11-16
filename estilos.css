@@ -507,3 +507,18 @@ table.comp tr.grupo td{background:var(--blue);color:#fff;font-weight:700;font-si
 .comp-calc input{width:120px}
 .comp-calc .res{color:var(--ok);font-size:15px}
 .comp-calc small{color:var(--muted);flex-basis:100%}
+
+/* columnas de tela con precio arriba */
+table.comp thead{position:sticky;top:0;z-index:4}
+table.comp thead th{position:static}
+table.comp thead tr.precios th{border-bottom:0}
+table.comp th.tela{background:#f3efe4}
+table.comp th.tela.sel,table.comp td.tela.sel{background:#f7edd2}
+table.comp th.tela input{max-width:90px;font-weight:800;border-color:var(--accent)}
+table.comp .lbl-precio{display:block;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px}
+table.comp td.tela{color:var(--ink);font-weight:600;white-space:nowrap}
+table.comp .cero{color:#c9c3b6}
+table.comp th small{font-weight:600;text-transform:none;letter-spacing:0;color:var(--accent-d)}
+.comp-formula{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:#fff8e6;border:1px solid #ecd9a6;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:14px}
+.comp-formula input{width:56px;text-align:center;padding:4px 6px;font-weight:800}
+.comp-formula .total-con{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}

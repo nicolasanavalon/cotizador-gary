@@ -142,6 +142,10 @@
             <p class="hint" style="margin:0">Cada costo se arma sumando sus componentes. Armado = valores de confección del tarifario 2025.</p></div>
         </div>
         <div class="tipos-tabs" id="compTipos"></div>
+        <div class="comp-formula">
+          <span><b>Tela</b> = (lado mayor ÷ <input id="compDiv" inputmode="decimal">) × <input id="compFac" inputmode="decimal"> × precio de la tela</span>
+          <span class="total-con">Costo total con tela: <span class="chips" id="compTelaTotal"></span></span>
+        </div>
         <div class="comp-calc">
           <label>¿Medida que no está en la tabla? <input id="compCalcIn" placeholder="Ej: 6 x 4"></label>
           <span id="compCalcOut"></span>

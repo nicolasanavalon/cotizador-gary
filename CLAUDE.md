@@ -13,6 +13,9 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - Tabla de costos por componentes: por tipo de bandera; medidas hacia abajo (tarifario 2025:
   23 regulares + 7 monumentales); columnas Tela, Sublimado, Huincha, Argollas, Armado,
   Cortado, Varios. Armado = valores de "Confección" del tarifario de mano de obra 2025.
+- **Tela:** 4 columnas (Tela Bistrech, Raso, Microperforado, Oxford), cada una con su precio
+  editable arriba (Bistrech $730). Fórmula: `tela = (lado mayor ÷ 1,4) × 1,2 × precio`
+  (ej. 1,50 × 1,00 con $730 → $939). El costo total usa la tela elegida (por defecto Bistrech).
 - El costo unitario siempre se puede escribir a mano.
 
 ## Precios y margen
