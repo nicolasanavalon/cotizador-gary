@@ -143,7 +143,11 @@
         </div>
         <div class="tipos-tabs" id="compTipos"></div>
         <div class="comp-formula">
-          <span><b>Tela</b> = (lado mayor ÷ <input id="compDiv" inputmode="decimal">) × <input id="compFac" inputmode="decimal"> × precio de la tela</span>
+          <span class="formulas">
+            <span><b>Tela</b> = (lado mayor ÷ <input id="compDiv" inputmode="decimal">) × <input id="compFac" inputmode="decimal"> × precio de la tela</span>
+            <span><b>Sublimado</b> = (lado mayor ÷ 1,4 × 1,2) × 2 × precio del sublimado
+              <label class="check sub-chk"><input type="checkbox" id="compLlevaSub"> este tipo lleva sublimado</label></span>
+          </span>
           <span class="total-con">Costo total con tela: <span class="chips" id="compTelaTotal"></span></span>
         </div>
         <div class="comp-calc">
@@ -152,11 +156,6 @@
           <small>Regla: se usa la medida más cercana en m² y se escala por la proporción de m².</small>
         </div>
         <div class="table-wrap comp-wrap"><table class="list editable comp" id="tablaComp"></table></div>
-      </div>
-      <div class="card">
-        <h2>Valores de referencia (varios)</h2>
-        <p class="hint" style="margin:0 0 8px">Tarifario mano de obra 2025. Se usarán en las fórmulas.</p>
-        <div class="table-wrap"><table class="list editable" id="tablaTarifas" style="max-width:520px"></table></div>
       </div>
     </div>
 
