@@ -142,6 +142,11 @@
             <p class="hint" style="margin:0">Cada costo se arma sumando sus componentes. Armado = valores de confección del tarifario 2025.</p></div>
         </div>
         <div class="tipos-tabs" id="compTipos"></div>
+        <div class="comp-calc">
+          <label>¿Medida que no está en la tabla? <input id="compCalcIn" placeholder="Ej: 6 x 4"></label>
+          <span id="compCalcOut"></span>
+          <small>Regla: se usa la medida más cercana en m² y se escala por la proporción de m².</small>
+        </div>
         <div class="table-wrap comp-wrap"><table class="list editable comp" id="tablaComp"></table></div>
       </div>
       <div class="card">

@@ -501,3 +501,9 @@ table.comp input{max-width:96px;text-align:right;padding:5px 7px}
 table.comp input:placeholder-shown{color:#bbb}
 table.comp td.tot{font-weight:800;background:var(--accent-soft);white-space:nowrap}
 table.comp tr.grupo td{background:var(--blue);color:#fff;font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:6px 12px;position:sticky;left:0}
+.item .nota .estim{color:#8a6814;font-weight:600}
+.comp-calc{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#faf8f4;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px}
+.comp-calc label{display:flex;align-items:center;gap:8px;font-weight:700}
+.comp-calc input{width:120px}
+.comp-calc .res{color:var(--ok);font-size:15px}
+.comp-calc small{color:var(--muted);flex-basis:100%}

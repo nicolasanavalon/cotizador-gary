@@ -598,11 +598,27 @@ function opcionesMedida(tipo, mat) {
   return MATRIZ.filter(r => r.tipo === tipo && r.material === mat)
     .sort((a, b) => areaDe(a.medida) - areaDe(b.medida)).map(r => r.medida);
 }
-function costoMatriz(it) {
-  if (!esBandera(it) || !it.tipo || it.material === 'Otro' || it.medida === 'Otra') return null;
-  const r = MATRIZ.find(r => r.tipo === it.tipo && r.material === it.material && r.medida === it.medida);
-  return r ? +r.costo : null;
+/* REGLA DE NEGOCIO (no cambiar sin consultar): si una medida NO está en la tabla de costos,
+   se toma la medida MÁS CERCANA EN m² que sí tenga costo y se escala por la proporción de m².
+   Ej.: 3,00 x 2,00 = 6 m² cuesta $10.000 → 6,00 x 4,00 = 24 m² → 24/6 = 4 → $40.000. */
+function estimarPorM2(medida, filas) {
+  const a = areaDe(medida); if (!a) return null;
+  const exacta = filas.find(f => f.medida === medida && +f.costo > 0);
+  if (exacta) return { costo: +exacta.costo, estimado: false };
+  const cands = filas.filter(f => +f.costo > 0 && areaDe(f.medida) > 0);
+  if (!cands.length) return null;
+  const ref = cands.reduce((m, f) => Math.abs(areaDe(f.medida) - a) < Math.abs(areaDe(m.medida) - a) ? f : m);
+  const factor = a / areaDe(ref.medida);
+  return { costo: Math.round(+ref.costo * factor), estimado: true, ref: ref.medida, costoRef: +ref.costo, factor };
 }
+const fmtFactor = f => f.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+/* Costo de un producto según la matriz (exacto o estimado por m²). null si no hay con qué calcular. */
+function costoInfo(it) {
+  if (!esBandera(it) || !it.tipo || !it.material || it.material === 'Otro') return null;
+  const med = medidaEf(it); if (!med) return null;
+  return estimarPorM2(med, MATRIZ.filter(r => r.tipo === it.tipo && r.material === it.material));
+}
+function costoMatriz(it) { const c = costoInfo(it); return c ? c.costo : null; }
 const opt = (v, sel, label) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(label ?? v)}</option>`;
 
 function opcionesMaterialItem(it) {
@@ -626,8 +642,10 @@ function renderItems() {
     normalizarItem(it);
     const band = esBandera(it), foto = imgDe(it.imagen), cm = costoMatriz(it);
     const mats = opcionesMaterialItem(it), meds = opcionesMedidaItem(it);
+    const ci = costoInfo(it);
     const notaCosto = cm != null
-      ? (it.costoManual && +it.costo !== cm ? `✎ a mano · <a href="#" data-act="matriz">usar matriz (${clp(cm)})</a>` : 'de la matriz de costos')
+      ? (it.costoManual && +it.costo !== cm ? `✎ a mano · <a href="#" data-act="matriz">usar ${ci.estimado ? 'estimado' : 'matriz'} (${clp(cm)})</a>`
+        : ci.estimado ? `<span class="estim">≈ estimado por m²: ${esc(ci.ref)} (${clp(ci.costoRef)}) × ${fmtFactor(ci.factor)}</span>` : 'de la matriz de costos')
       : (band && !it.tipo ? 'elige el tipo para traerlo de la matriz' : 'escríbelo a mano');
     return `<div class="item ${foto ? 'con-foto' : 'sin-foto'}" data-id="${it.id}">
       ${foto ? `<img class="item-fondo" src="${foto}" alt="">` : ''}
@@ -734,7 +752,11 @@ $('#items').addEventListener('change', e => {
   }
   const it = itemDe(e.target); const f = e.target.dataset.f; if (!it || !f) return;
   if (f === 'vaina') { it.vaina = e.target.value; saveDraft(); return; }
-  if (f === 'medidaOtra') { it.medidaOtra = normMedida(e.target.value); e.target.value = it.medidaOtra; recalc(); return; }
+  if (f === 'medidaOtra') {
+    it.medidaOtra = normMedida(e.target.value);
+    const cm = costoMatriz(it); if (cm != null && !it.costoManual) it.costo = cm;
+    renderItems(); return;
+  }
   if (!CAMPOS_DEF.includes(f)) return;
   it[f] = e.target.value;
   if (f === 'producto') { if (!esBandera(it)) it.tipo = ''; actualizarTituloAuto(it); }
@@ -1321,6 +1343,19 @@ function compValor(tipo, m, col) {
   return v != null ? +v : (col === 'armado' ? +m.confeccion || 0 : 0);
 }
 function compTotal(tipo, m) { return COMP_COLS.reduce((s, [k]) => s + compValor(tipo, m, k), 0); }
+/* Costo por componentes de cualquier medida (misma regla: si no está, se estima por m² desde la más cercana). */
+function costoComponentes(tipo, medida) {
+  return estimarPorM2(normMedida(medida), compData().medidas.map(m => ({ medida: m.medida, costo: compTotal(tipo, m) })));
+}
+function renderCompCalc() {
+  const v = $('#compCalcIn').value.trim(), out = $('#compCalcOut');
+  if (!v) { out.innerHTML = ''; return; }
+  const med = normMedida(v), r = costoComponentes(COMP_TIPO, med);
+  if (!areaDe(med)) { out.innerHTML = '<span class="warn-txt">Escribe la medida como 6 x 4</span>'; return; }
+  out.innerHTML = !r ? 'Sin costos para calcular' : r.estimado
+    ? `<b>${esc(med)}</b> = ${fmtFactor(areaDe(med))} m² → no está en la tabla. Más cercana: <b>${esc(r.ref)}</b> (${fmtFactor(areaDe(r.ref))} m², ${clp(r.costoRef)}) × ${fmtFactor(r.factor)} = <b class="res">${clp(r.costo)}</b>`
+    : `<b>${esc(med)}</b> está en la tabla: <b class="res">${clp(r.costo)}</b>`;
+}
 function renderComp() {
   const cd = compData();
   if (!COMP_TIPO || !CFG.tipos.includes(COMP_TIPO)) COMP_TIPO = CFG.tipos[0];
@@ -1333,6 +1368,7 @@ function renderComp() {
         return `<td class="num"><input data-money inputmode="numeric" data-col="${k}" value="${v ? miles(v) : ''}" placeholder="0"></td>`; }).join('')}
       <td class="num tot">${clp(compTotal(COMP_TIPO, m))}</td></tr>`;
   }).join('');
+  renderCompCalc();
   $('#tablaComp').innerHTML = `<thead><tr><th>Medida (m)</th>${COMP_COLS.map(([, l]) => `<th class="num">${l}</th>`).join('')}<th class="num">Costo total</th></tr></thead><tbody>${filas}</tbody>`;
   const tf = CFG.tarifas || TARIFAS_DEF;
   $('#tablaTarifas').innerHTML = `<thead><tr><th>Concepto</th><th class="num">Valor</th></tr></thead><tbody>` +
@@ -1345,6 +1381,7 @@ function subirComp() {
     subirConfig({ componentes: CFG.componentes }).then(() => toast('Tabla guardada'), err => toast('No se pudo guardar: ' + err.message));
   }, 900);
 }
+$('#compCalcIn').addEventListener('input', renderCompCalc);
 $('#compTipos').addEventListener('click', e => { if (!e.target.dataset.tipo) return; COMP_TIPO = e.target.dataset.tipo; renderComp(); });
 $('#tablaComp').addEventListener('input', e => {
   const col = e.target.dataset.col; if (!col) return;
@@ -1354,6 +1391,7 @@ $('#tablaComp').addEventListener('input', e => {
   vals[COMP_TIPO][m.medida] = vals[COMP_TIPO][m.medida] || {};
   vals[COMP_TIPO][m.medida][col] = num(e.target.value);
   tr.querySelector('.tot').textContent = clp(compTotal(COMP_TIPO, m));
+  renderCompCalc();
   subirComp();
 });
 $('#tablaTarifas').addEventListener('change', e => {
