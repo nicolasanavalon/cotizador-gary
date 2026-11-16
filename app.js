@@ -40,6 +40,23 @@ const FERIADOS = new Set([
   '2027-08-15', '2027-09-18', '2027-09-19', '2027-10-11', '2027-10-31', '2027-11-01', '2027-12-08', '2027-12-25',
 ]);
 
+/* Tarifario mano de obra 2025 (confección) → columna "Armado" de la tabla de componentes. */
+const MEDIDAS_TARIFARIO = [
+  ['Banderas regulares', [['0,30 x 0,20', 500], ['0,60 x 0,40', 1000], ['0,76 x 0,61', 1430], ['0,80 x 0,54', 1100],
+    ['1,00 x 0,66', 1240], ['1,20 x 0,80', 1320], ['1,22 x 1,00', 2080], ['1,28 x 0,84', 1320], ['1,50 x 1,00', 1760],
+    ['1,70 x 1,12', 2160], ['1,80 x 1,20', 2160], ['2,10 x 1,40', 2200], ['2,25 x 1,50', 2420], ['2,55 x 1,70', 2420],
+    ['2,70 x 1,80', 2620], ['3,00 x 2,00', 3300], ['3,55 x 2,33', 4000], ['4,00 x 2,66', 4840], ['4,50 x 3,00', 5445],
+    ['5,00 x 3,33', 5800], ['6,00 x 4,00', 6200], ['7,00 x 4,66', 9500], ['8,00 x 5,33', 13290]]],
+  ['Banderas monumentales', [['12,00 x 8,00', 60000], ['13,00 x 8,67', 85000], ['14,00 x 9,33', 90000], ['15,00 x 10,00', 95000],
+    ['16,00 x 10,67', 105000], ['17,00 x 11,33', 120000], ['18,00 x 12,00', 135000]]],
+];
+const COMP_COLS = [['tela', 'Tela'], ['sublimado', 'Sublimado'], ['huincha', 'Huincha'], ['argollas', 'Argollas'],
+  ['armado', 'Armado'], ['cortado', 'Cortado'], ['varios', 'Varios']];
+const COMPONENTES_DEF = {
+  medidas: MEDIDAS_TARIFARIO.flatMap(([grupo, ms]) => ms.map(([medida, confeccion]) => ({ medida, grupo, confeccion }))),
+  valores: {},
+};
+const TARIFAS_DEF = [{ concepto: 'Hora calandra', valor: 70 }, { concepto: 'Postura vaina', valor: 330 }, { concepto: 'Postura driza', valor: 220 }];
 const CAJAS_DEF = [   // cajas reales del taller (capM2 = estimación hasta tener las capacidades)
   { id: 'chica', nombre: 'Caja chica', largo: 30.5, ancho: 25.5, alto: 20, pesoVacia: 0.2, capM2: 12 },
   { id: 'mediana', nombre: 'Caja mediana', largo: 40, ancho: 30, alto: 30, pesoVacia: 0.35, capM2: 29 },
@@ -50,6 +67,7 @@ const CONFIG_DEF = {
   fonoEmpresa: '', mailEmpresa: '', lema: '', banco: '', cuentaCte: '', contactos: '', web: '',
   condPago: '', plazo: '', validez: '', garantia: '',
   cajas: CAJAS_DEF, capacidad: {}, pesoM2: 0.2, cajasEjemplo: true,
+  componentes: COMPONENTES_DEF, tarifas: TARIFAS_DEF,
   margenDef: 40, redondeo: 100, nextCot: 1, nextOt: 1,
   tipos: TIPOS_DEF, materiales: MATERIALES_DEF,
 };
@@ -225,7 +243,7 @@ function cargarNube() {
     try {
       const antes = cambios;
       const j = await api('cargar');
-      if (timerMatriz || subiendoMatriz) return false;   // hay cambios de matriz sin subir: no pisarlos
+      if (timerMatriz || subiendoMatriz || timerComp) return false;   // hay cambios sin subir: no pisarlos
       if (cambios !== antes) { setTimeout(actualizar, 300); return false; }   // llegó vieja: pedir de nuevo
       const cfg = j.config || {};
       if (!Object.keys(cfg).length) {
@@ -378,6 +396,7 @@ function refrescarVista() {
   if (v === 'cotizaciones') renderCotizaciones();
   if (v === 'ots') renderOts();
   if (v === 'matriz' && !$('#tablaMatriz').contains(document.activeElement)) renderMatriz();
+  if (v === 'matriz' && !$('#view-matriz').contains(document.activeElement) && !timerComp) renderComp();
   if (v === 'config' && !$('#view-config').contains(document.activeElement)) renderConfig();
   if (v === 'cotizar' && !$('#items').contains(document.activeElement)) renderItems();
 }
@@ -531,7 +550,7 @@ function mostrar(view) {
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   if (view === 'cotizaciones') renderCotizaciones();
   if (view === 'ots') renderOts();
-  if (view === 'matriz') renderMatriz();
+  if (view === 'matriz') { renderMatriz(); renderComp(); }
   if (view === 'config') renderConfig();
   window.scrollTo(0, 0);
   if (view !== 'cotizar') actualizar();
@@ -1292,6 +1311,63 @@ $('#tablaOt').addEventListener('change', async e => {
   o.estado = e.target.value;
   try { if (nubeActiva()) await api('guardarOt', { ot: o }); saveOts(); toast(`OT ${o.numero}: ${o.estado}`); }
   catch (err) { o.estado = antes; e.target.value = antes; toast('No se pudo guardar: ' + err.message); }
+});
+
+/* ---------------- Costos por componentes ---------------- */
+let COMP_TIPO = null, timerComp = null;
+const compData = () => { if (!CFG.componentes || !CFG.componentes.medidas) CFG.componentes = JSON.parse(JSON.stringify(COMPONENTES_DEF)); return CFG.componentes; };
+function compValor(tipo, m, col) {
+  const v = compData().valores?.[tipo]?.[m.medida]?.[col];
+  return v != null ? +v : (col === 'armado' ? +m.confeccion || 0 : 0);
+}
+function compTotal(tipo, m) { return COMP_COLS.reduce((s, [k]) => s + compValor(tipo, m, k), 0); }
+function renderComp() {
+  const cd = compData();
+  if (!COMP_TIPO || !CFG.tipos.includes(COMP_TIPO)) COMP_TIPO = CFG.tipos[0];
+  $('#compTipos').innerHTML = CFG.tipos.map(t => `<button class="chip ${t === COMP_TIPO ? 'active' : ''}" data-tipo="${esc(t)}">${esc(t)}</button>`).join('');
+  let grupo = '';
+  const filas = cd.medidas.map((m, i) => {
+    const cab = m.grupo !== grupo ? (grupo = m.grupo, `<tr class="grupo"><td colspan="${COMP_COLS.length + 2}">${esc(m.grupo)}</td></tr>`) : '';
+    return cab + `<tr data-i="${i}"><td class="med">${esc(m.medida.replace(' x ', ' × '))}</td>
+      ${COMP_COLS.map(([k]) => { const v = compValor(COMP_TIPO, m, k);
+        return `<td class="num"><input data-money inputmode="numeric" data-col="${k}" value="${v ? miles(v) : ''}" placeholder="0"></td>`; }).join('')}
+      <td class="num tot">${clp(compTotal(COMP_TIPO, m))}</td></tr>`;
+  }).join('');
+  $('#tablaComp').innerHTML = `<thead><tr><th>Medida (m)</th>${COMP_COLS.map(([, l]) => `<th class="num">${l}</th>`).join('')}<th class="num">Costo total</th></tr></thead><tbody>${filas}</tbody>`;
+  const tf = CFG.tarifas || TARIFAS_DEF;
+  $('#tablaTarifas').innerHTML = `<thead><tr><th>Concepto</th><th class="num">Valor</th></tr></thead><tbody>` +
+    tf.map((t, i) => `<tr data-i="${i}"><td>${esc(t.concepto)}</td><td class="num"><input data-money inputmode="numeric" data-tarifa value="${miles(t.valor)}"></td></tr>`).join('') + '</tbody>';
+}
+function subirComp() {
+  clearTimeout(timerComp);
+  timerComp = setTimeout(() => {
+    timerComp = null; saveCfg();
+    subirConfig({ componentes: CFG.componentes }).then(() => toast('Tabla guardada'), err => toast('No se pudo guardar: ' + err.message));
+  }, 900);
+}
+$('#compTipos').addEventListener('click', e => { if (!e.target.dataset.tipo) return; COMP_TIPO = e.target.dataset.tipo; renderComp(); });
+$('#tablaComp').addEventListener('input', e => {
+  const col = e.target.dataset.col; if (!col) return;
+  const tr = e.target.closest('tr'), m = compData().medidas[+tr.dataset.i];
+  const vals = compData().valores;
+  vals[COMP_TIPO] = vals[COMP_TIPO] || {};
+  vals[COMP_TIPO][m.medida] = vals[COMP_TIPO][m.medida] || {};
+  vals[COMP_TIPO][m.medida][col] = num(e.target.value);
+  tr.querySelector('.tot').textContent = clp(compTotal(COMP_TIPO, m));
+  subirComp();
+});
+$('#tablaTarifas').addEventListener('change', e => {
+  if (!e.target.hasAttribute('data-tarifa')) return;
+  CFG.tarifas = JSON.parse(JSON.stringify(CFG.tarifas || TARIFAS_DEF));
+  CFG.tarifas[+e.target.closest('tr').dataset.i].valor = num(e.target.value);
+  saveCfg(); subirConfig({ tarifas: CFG.tarifas }).then(() => toast('Guardado'), err => toast('No se pudo guardar: ' + err.message));
+});
+$('#matrizSub').addEventListener('click', e => {
+  const sub = e.target.dataset.sub; if (!sub) return;
+  $$('#matrizSub button').forEach(b => b.classList.toggle('active', b === e.target));
+  $('#subComp').style.display = sub === 'comp' ? '' : 'none';
+  $('#subAnt').style.display = sub === 'ant' ? '' : 'none';
+  if (sub === 'comp') renderComp(); else renderMatriz();
 });
 
 /* ---------------- Matriz de costos ---------------- */

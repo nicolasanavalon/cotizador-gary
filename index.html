@@ -129,6 +129,31 @@
   <section id="view-matriz" class="view">
     <div class="view-head">
       <h1>Matriz de costos</h1>
+      <div class="subtabs" id="matrizSub">
+        <button data-sub="comp" class="active">Costos por componentes</button>
+        <button data-sub="ant">Matriz anterior (la que usa hoy el cotizador)</button>
+      </div>
+    </div>
+
+    <div id="subComp">
+      <div class="card">
+        <div class="comp-head">
+          <div><h2>Costo por tipo de bandera y medida</h2>
+            <p class="hint" style="margin:0">Cada costo se arma sumando sus componentes. Armado = valores de confección del tarifario 2025.</p></div>
+        </div>
+        <div class="tipos-tabs" id="compTipos"></div>
+        <div class="table-wrap comp-wrap"><table class="list editable comp" id="tablaComp"></table></div>
+      </div>
+      <div class="card">
+        <h2>Valores de referencia (varios)</h2>
+        <p class="hint" style="margin:0 0 8px">Tarifario mano de obra 2025. Se usarán en las fórmulas.</p>
+        <div class="table-wrap"><table class="list editable" id="tablaTarifas" style="max-width:520px"></table></div>
+      </div>
+    </div>
+
+    <div id="subAnt" style="display:none">
+    <div class="view-head">
+      <span></span>
       <div class="actions">
         <select id="filtroTipo"></select>
         <button class="btn" id="btnAddFila">+ Agregar fila</button>
@@ -137,6 +162,7 @@
     </div>
     <div id="avisoEjemplo" class="aviso">Estos costos son <b>de ejemplo</b>. Reemplázalos por los reales: edítalos acá o usa “Pegar desde Excel”.</div>
     <div class="card table-wrap"><table class="list editable" id="tablaMatriz"></table></div>
+    </div>
 
     <dialog id="dlgPegar">
       <h2>Pegar desde Excel</h2>

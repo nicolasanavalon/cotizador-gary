@@ -485,3 +485,19 @@ table.editable input.n{max-width:80px;text-align:right}
 /* OT: terminación en tipo oración, sin checklist ni firmas */
 .ot-specs .term b{text-transform:none;font-size:12px}
 .ot-pie{grid-template-columns:1fr}
+
+/* ===== Costos por componentes ===== */
+.subtabs{display:flex;gap:4px;background:#ebe8e1;border-radius:10px;padding:4px;flex-wrap:wrap}
+.subtabs button{border:0;background:none;padding:7px 14px;border-radius:7px;font-weight:600;cursor:pointer;color:var(--muted);font:inherit;font-size:14px}
+.subtabs button.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.comp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.tipos-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.comp-wrap{max-height:70vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+table.comp{min-width:900px}
+table.comp thead th{position:sticky;top:0;z-index:2}
+table.comp td.med,table.comp thead th:first-child{position:sticky;left:0;background:#fff;z-index:1;font-weight:700;white-space:nowrap}
+table.comp thead th:first-child{background:#faf9f6;z-index:3}
+table.comp input{max-width:96px;text-align:right;padding:5px 7px}
+table.comp input:placeholder-shown{color:#bbb}
+table.comp td.tot{font-weight:800;background:var(--accent-soft);white-space:nowrap}
+table.comp tr.grupo td{background:var(--blue);color:#fff;font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:6px 12px;position:sticky;left:0}
