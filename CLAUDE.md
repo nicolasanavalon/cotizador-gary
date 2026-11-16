@@ -18,6 +18,9 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   (ej. 1,50 × 1,00 con $730 → $939). El costo total usa la tela elegida (por defecto Bistrech).
 - **Sublimado:** `sublimado = (lado mayor ÷ 1,4 × 1,2) × 2 × precio sublimado` (precio editable,
   $2.800; ej. 1,50 × 1,00 → $7.200). Se puede desmarcar por tipo de bandera ("no lleva").
+- **Huincha:** `huincha = (lado menor + 0,10 m) × precio por metro` (precio editable, $350;
+  ej. 1,50 × 1,00 → 1,10 × 350 = $385).
+- **Argollas:** pendiente (el dueño enviará cuadro de cantidad de argollas por medida).
 - Sin tabla de "valores de referencia" (hora calandra, etc.): el dueño no la quiere.
 - El costo unitario siempre se puede escribir a mano.
 
