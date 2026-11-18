@@ -536,3 +536,30 @@ table.comp td.arg .cant{font-weight:700}
 table.comp td.arg .cant.est{color:#8a6814}
 
 table.comp td.arg .est{color:#8a6814}
+
+/* costo unitario como botón que abre el desglose */
+.costo-btn{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;border:1px solid var(--line);border-radius:8px;
+  background:#fff;padding:8px 10px;cursor:pointer;font:inherit;color:var(--ink);text-align:left}
+.costo-btn b{font-size:14px}
+.costo-btn span{font-size:11px;font-weight:700;color:var(--accent-d);white-space:nowrap}
+.costo-btn:hover{border-color:var(--accent);box-shadow:0 0 0 2px #f1e3bd}
+.item.con-foto .costo-btn{background:rgba(255,255,255,.86);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+#dlgCosto{max-width:460px}
+#dlgCosto h2{margin:0}
+#dlgCosto .hint{margin:4px 0 0}
+.dc-tabla{width:100%;border-collapse:collapse;margin-top:12px}
+.dc-tabla th{text-align:left;font-weight:700;font-size:14px;padding:6px 0;vertical-align:middle}
+.dc-tabla th small{display:block;font-weight:500;font-size:11px;color:var(--muted)}
+.dc-tabla th small.estim{color:#8a6814}
+.dc-tabla th small.cambio{color:var(--accent-d)}
+.dc-tabla td{padding:4px 0;width:150px}
+.dc-tabla td input{text-align:right;font-weight:600}
+.dc-tabla td.num{text-align:right;font-weight:700;padding-right:10px}
+.dc-tabla tbody tr{border-bottom:1px solid var(--line)}
+.dc-tabla tr.ajuste th,.dc-tabla tr.ajuste td{color:var(--accent-d)}
+.dc-tabla tfoot th{font-size:15px;padding-top:12px}
+.dc-tabla tfoot td{padding-top:12px}
+.dc-tabla tfoot input{font-size:17px;font-weight:800;border:2px solid var(--blue)}
+.dc-acc{justify-content:space-between;margin-top:14px}
+#dlgCosto{max-width:540px}
+.dc-acc{flex-wrap:nowrap}

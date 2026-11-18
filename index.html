@@ -131,7 +131,7 @@
       <h1>Matriz de costos</h1>
       <div class="subtabs" id="matrizSub">
         <button data-sub="comp" class="active">Costos por componentes</button>
-        <button data-sub="ant">Matriz anterior (la que usa hoy el cotizador)</button>
+        <button data-sub="ant">Matriz anterior (ya no se usa)</button>
       </div>
     </div>
 
@@ -254,6 +254,17 @@
 <div id="print" class="print-only"></div>
 
 <div id="toast" class="no-print"></div>
+
+<dialog id="dlgCosto" class="no-print">
+  <div class="dc-head"><div><h2 id="dcTitulo">Desglose del costo</h2><p class="hint" id="dcSub"></p></div></div>
+  <table class="dc-tabla"><tbody id="dcFilas"></tbody>
+    <tfoot><tr><th>Costo unitario neto</th><td><input data-money inputmode="numeric" id="dcTotal"></td></tr></tfoot></table>
+  <p class="hint">Puedes cambiar cualquier componente o escribir el total directamente.</p>
+  <div class="actions dc-acc">
+    <button class="btn ghost" id="dcMatriz">Volver a la matriz</button>
+    <span class="actions"><button class="btn ghost" id="dcCancelar">Cancelar</button><button class="btn primary" id="dcAplicar">Aplicar</button></span>
+  </div>
+</dialog>
 
 <dialog id="dlgOt" class="no-print">
   <div class="vista-barra">

@@ -666,22 +666,48 @@ function interpolarPorM2(medida, filas) {
 }
 const fmtFactor = f => f.toLocaleString('es-CL', { maximumFractionDigits: 2 });
 /* Costo de un producto según la matriz (exacto o estimado por m²). null si no hay con qué calcular. */
-function costoInfo(it) {
-  if (!esBandera(it) || !it.tipo || !it.material || it.material === 'Otro') return null;
-  const med = medidaEf(it); if (!med) return null;
-  return estimarPorM2(med, MATRIZ.filter(r => r.tipo === it.tipo && r.material === it.material));
+/* Desglose del costo de un producto según la tabla de costos por componentes
+   (tipo de bandera + tela + medida). Tela, sublimado y huincha: fórmula (sirven para cualquier medida);
+   argollas y cortado: cuadro con interpolación; armado y varios: tabla, y si la medida no está, regla de m². */
+const DESGLOSE_COLS = [['tela', 'Tela'], ['sublimado', 'Sublimado'], ['huincha', 'Huincha'], ['argollas', 'Argollas'],
+  ['cortado', 'Cortado'], ['armado', 'Armado'], ['varios', 'Varios']];
+function valorTablaMedida(tipo, medida, col) {
+  const cd = compData(), m = cd.medidas.find(x => x.medida === medida);
+  if (m) return { v: compValor(tipo, m, col), est: false };
+  const r = estimarPorM2(medida, cd.medidas.map(x => ({ medida: x.medida, costo: compValor(tipo, x, col) })));
+  return r ? { v: r.costo, est: r.estimado, ref: r.ref } : { v: 0, est: false };
 }
+function desgloseMatriz(it) {
+  if (!esBandera(it) || !it.tipo) return null;
+  const med = medidaEf(it); if (!med || !areaDe(med)) return null;
+  const tela = it.material && it.material !== 'Otro' ? it.material : '';
+  const conPrecio = compTelas().some(t => t.nombre === tela && +t.precio > 0);
+  const sub = llevaSublimado(it.tipo), arg = cantidadArgollas(med), cor = infoCortado(med);
+  const arm = valorTablaMedida(it.tipo, med, 'armado'), var_ = valorTablaMedida(it.tipo, med, 'varios');
+  const filas = {
+    tela: { v: costoTela(tela, med), det: tela ? (conPrecio ? tela : `${tela}: sin precio en la matriz`) : 'elige la tela' },
+    sublimado: { v: sub ? costoSublimado(med) : 0, det: sub ? '' : 'este tipo no lleva' },
+    huincha: { v: costoHuincha(med) },
+    argollas: { v: costoArgollas(med), det: `${arg.n} u.`, est: arg.estimado },
+    cortado: { v: cor.costo, est: cor.estimado },
+    armado: { v: arm.v, est: arm.est },
+    varios: { v: var_.v, est: var_.est },
+  };
+  const total = Object.values(filas).reduce((s, f) => s + (+f.v || 0), 0);
+  return { filas, total, estimado: Object.values(filas).some(f => f.est) };
+}
+function costoInfo(it) { const d = desgloseMatriz(it); return d ? { costo: d.total, estimado: d.estimado } : null; }
 function costoMatriz(it) { const c = costoInfo(it); return c ? c.costo : null; }
 const opt = (v, sel, label) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(label ?? v)}</option>`;
 
 function opcionesMaterialItem(it) {
-  const deMatriz = esBandera(it) && it.tipo ? opcionesMaterial(it.tipo) : [];
-  return { deMatriz, resto: CFG.materiales.filter(m => !deMatriz.includes(m)) };
+  const deMatriz = esBandera(it) ? compTelas().filter(t => +t.precio > 0).map(t => t.nombre) : [];
+  const todos = [...new Set(compTelas().map(t => t.nombre).concat(CFG.materiales))];
+  return { deMatriz, resto: todos.filter(m => !deMatriz.includes(m)) };
 }
 function opcionesMedidaItem(it) {
-  const deMatriz = esBandera(it) && it.tipo && it.material && it.material !== 'Otro' ? opcionesMedida(it.tipo, it.material) : [];
-  const todas = [...new Set(MATRIZ.map(r => r.medida))].sort((a, b) => areaDe(a) - areaDe(b));
-  return { deMatriz, resto: todas.filter(m => !deMatriz.includes(m)) };
+  const tabla = compData().medidas.map(m => m.medida);
+  return esBandera(it) ? { deMatriz: tabla, resto: [] } : { deMatriz: [], resto: tabla };
 }
 function selectGrupos(campo, valor, deMatriz, resto, otro, extra = '') {
   const g = (lbl, arr) => arr.length ? `<optgroup label="${lbl}">${arr.map(x => opt(x, valor)).join('')}</optgroup>` : '';
@@ -697,9 +723,9 @@ function renderItems() {
     const mats = opcionesMaterialItem(it), meds = opcionesMedidaItem(it);
     const ci = costoInfo(it);
     const notaCosto = cm != null
-      ? (it.costoManual && +it.costo !== cm ? `✎ a mano · <a href="#" data-act="matriz">usar ${ci.estimado ? 'estimado' : 'matriz'} (${clp(cm)})</a>`
-        : ci.estimado ? `<span class="estim">≈ estimado por m²: ${esc(ci.ref)} (${clp(ci.costoRef)}) × ${fmtFactor(ci.factor)}</span>` : 'de la matriz de costos')
-      : (band && !it.tipo ? 'elige el tipo para traerlo de la matriz' : 'escríbelo a mano');
+      ? (it.costoManual && +it.costo !== cm ? `✎ editado · <a href="#" data-act="matriz">usar matriz (${clp(cm)})</a>`
+        : ci.estimado ? '<span class="estim">de la matriz · incluye valores estimados por m²</span>' : 'de la matriz de costos')
+      : (band && !it.tipo ? 'elige tipo, tela y medida' : 'pincha para escribirlo');
     return `<div class="item ${foto ? 'con-foto' : 'sin-foto'}" data-id="${it.id}">
       ${foto ? `<img class="item-fondo" src="${foto}" alt="">` : ''}
       <div class="item-head">
@@ -732,7 +758,8 @@ function renderItems() {
       </div>
       <div class="item-precio">
         <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
-        <label>Costo unit. neto<input data-money inputmode="numeric" data-f="costo" value="${miles(it.costo)}"><small class="nota">${notaCosto}</small></label>
+        <label>Costo unit. neto<button type="button" class="costo-btn" data-act="desglose" title="Ver y editar el desglose">
+            <b>${clp(it.costo)}</b><span>desglose ▸</span></button><small class="nota">${notaCosto}</small></label>
         <div class="item-margen"><span class="lbl">Margen</span><span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>
       </div>
       <div class="item-res" data-res></div>
@@ -796,6 +823,65 @@ $('#chipsDesc').addEventListener('input', e => {
 
 const itemDe = el => D.items.find(i => i.id === el.closest('.item')?.dataset.id);
 
+/* ---------- Cuadro de desglose del costo unitario ---------- */
+let DC = null;
+function abrirDesglose(it) {
+  const dm = desgloseMatriz(it);
+  const vals = {}, info = {};
+  for (const [k] of DESGLOSE_COLS) {
+    vals[k] = it.desglose && it.desglose[k] != null ? +it.desglose[k] : (dm ? +dm.filas[k].v || 0 : 0);
+    info[k] = dm ? dm.filas[k] : {};
+  }
+  const suma = Object.values(vals).reduce((s, v) => s + v, 0);
+  const ajuste = it.desglose ? (+it.desglose.ajuste || 0) : (+it.costo || 0) - suma;
+  DC = { it, vals, info, ajuste: Math.round(ajuste), matriz: dm ? dm.total : null };
+  $('#dcTitulo').textContent = it.titulo || tituloAuto(it) || 'Producto';
+  $('#dcSub').textContent = [esBandera(it) ? it.tipo : productoEf(it), materialEf(it), medidaEf(it)].filter(Boolean).join(' · ') || '';
+  $('#dcMatriz').style.display = dm ? '' : 'none';
+  $('#dcMatriz').textContent = dm ? `Volver a la matriz (${clp(dm.total)})` : '';
+  renderDesglose();
+  $('#dlgCosto').showModal();
+}
+function renderDesglose(soloTotal) {
+  const suma = Object.values(DC.vals).reduce((s, v) => s + v, 0);
+  const total = suma + DC.ajuste;
+  if (!soloTotal) {
+    $('#dcFilas').innerHTML = DESGLOSE_COLS.map(([k, l]) => {
+      const inf = DC.info[k] || {};
+      const cambiado = DC.matriz != null && inf.v != null && Math.round(+inf.v) !== Math.round(DC.vals[k]);
+      return `<tr><th>${l}${inf.det ? `<small>${esc(inf.det)}</small>` : ''}${inf.est ? '<small class="estim">calculado (la medida no está en la tabla)</small>' : ''}
+        ${cambiado ? `<small class="cambio">matriz: ${clp(inf.v)}</small>` : ''}</th>
+        <td><input data-money inputmode="numeric" data-dc="${k}" value="${miles(DC.vals[k])}" placeholder="0"></td></tr>`;
+    }).join('') + `<tr class="ajuste" ${DC.ajuste ? '' : 'hidden'}><th>Ajuste manual<small>diferencia al editar el total</small></th><td class="num">${DC.ajuste < 0 ? '−' : ''}${clp(Math.abs(DC.ajuste))}</td></tr>`;
+  } else {
+    const fila = $('#dcFilas tr.ajuste');
+    fila.hidden = !DC.ajuste; fila.querySelector('td').textContent = (DC.ajuste < 0 ? '−' : '') + clp(Math.abs(DC.ajuste));
+  }
+  if (document.activeElement !== $('#dcTotal')) $('#dcTotal').value = miles(total) || '0';
+}
+$('#dcFilas').addEventListener('input', e => {
+  const k = e.target.dataset.dc; if (!k) return;
+  DC.vals[k] = num(e.target.value); renderDesglose(true);
+});
+$('#dcTotal').addEventListener('input', e => {
+  const suma = Object.values(DC.vals).reduce((s, v) => s + v, 0);
+  DC.ajuste = num(e.target.value) - suma; renderDesglose(true);
+});
+$('#dcCancelar').onclick = () => $('#dlgCosto').close();
+$('#dcAplicar').onclick = () => {
+  const it = DC.it, suma = Object.values(DC.vals).reduce((s, v) => s + v, 0), total = suma + DC.ajuste;
+  it.costo = total;
+  it.desglose = { ...DC.vals, ajuste: DC.ajuste };
+  it.costoManual = DC.matriz == null || Math.round(total) !== Math.round(DC.matriz) || DC.ajuste !== 0
+    || DESGLOSE_COLS.some(([k]) => Math.round(+(DC.info[k]?.v || 0)) !== Math.round(DC.vals[k]));
+  if (!it.costoManual) it.desglose = null;
+  $('#dlgCosto').close(); renderItems();
+};
+$('#dcMatriz').onclick = () => {
+  const it = DC.it; it.costo = DC.matriz; it.costoManual = false; it.desglose = null;
+  $('#dlgCosto').close(); renderItems();
+};
+
 const CAMPOS_DEF = ['producto', 'tipo', 'material', 'medida'];
 $('#items').addEventListener('change', e => {
   if (e.target.matches('[data-file]')) {
@@ -807,23 +893,18 @@ $('#items').addEventListener('change', e => {
   if (f === 'vaina') { it.vaina = e.target.value; saveDraft(); return; }
   if (f === 'medidaOtra') {
     it.medidaOtra = normMedida(e.target.value);
-    const cm = costoMatriz(it); if (cm != null && !it.costoManual) it.costo = cm;
+    const cm = costoMatriz(it); if (cm != null) { it.costo = cm; it.costoManual = false; it.desglose = null; }
     renderItems(); return;
   }
   if (!CAMPOS_DEF.includes(f)) return;
   it[f] = e.target.value;
   if (f === 'producto') { if (!esBandera(it)) it.tipo = ''; actualizarTituloAuto(it); }
   if (f === 'tipo') {
-    const ms = opcionesMaterial(it.tipo);
-    if (it.material !== 'Otro' && ms.length && !ms.includes(it.material)) it.material = ms.length === 1 ? ms[0] : '';
+    if (!it.material) it.material = compTelas().find(t => +t.precio > 0)?.nombre || '';   // por defecto la tela con precio (Bistrech)
     actualizarTituloAuto(it);
   }
-  if (f === 'tipo' || f === 'material') {
-    const ds = esBandera(it) && it.tipo && it.material && it.material !== 'Otro' ? opcionesMedida(it.tipo, it.material) : [];
-    if (ds.length && it.medida !== 'Otra' && !ds.includes(it.medida)) it.medida = ds.length === 1 ? ds[0] : '';
-  }
   const cm = costoMatriz(it);
-  if (cm != null) { it.costo = cm; it.costoManual = false; }
+  if (cm != null) { it.costo = cm; it.costoManual = false; it.desglose = null; }
   renderItems();
 });
 $('#items').addEventListener('input', e => {
@@ -856,7 +937,8 @@ $('#items').addEventListener('click', e => {
   if (act === 'dup') { const i = D.items.indexOf(it); D.items.splice(i + 1, 0, { ...it, id: uid() }); renderItems(); }
   if (act === 'img') e.target.closest('.item').querySelector('[data-file]').click();
   if (act === 'sinimg') { it.imagen = null; renderItems(); }
-  if (act === 'matriz') { e.preventDefault(); it.costo = costoMatriz(it) ?? it.costo; it.costoManual = false; renderItems(); }
+  if (act === 'matriz') { e.preventDefault(); it.costo = costoMatriz(it) ?? it.costo; it.costoManual = false; it.desglose = null; renderItems(); }
+  if (act === 'desglose') abrirDesglose(it);
 });
 $('#chipsGlobal').addEventListener('click', e => {
   if (!e.target.dataset.mg) return;

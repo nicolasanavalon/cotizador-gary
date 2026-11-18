@@ -28,6 +28,12 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   no está, se **interpola** entre la de abajo y la de arriba según m² (decisión del dueño, para que
   nunca baje al crecer la bandera). Fuera del rango del cuadro se usa la proporción de m².
 - Sin tabla de "valores de referencia" (hora calandra, etc.): el dueño no la quiere.
+- **El cotizador toma el costo de la tabla de costos por componentes** (tipo de bandera + tela +
+  medida) con `desgloseMatriz()`: tela/sublimado/huincha por fórmula (cualquier medida), argollas y
+  cortado por cuadro con interpolación, armado y varios de la tabla (regla de m² si la medida no está).
+  La matriz anterior ya no se usa.
+- Al pinchar el costo unitario se abre el **desglose** editable (cada componente o el total; si se
+  edita el total, la diferencia queda como "Ajuste manual"). "Volver a la matriz" deshace los cambios.
 - El costo unitario siempre se puede escribir a mano.
 
 ## Precios y margen
