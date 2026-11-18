@@ -182,8 +182,26 @@ const Store = {
     try { const v = localStorage.getItem('cg_' + k); return v == null ? def : JSON.parse(v); }
     catch (e) { return def; }
   },
-  set(k, v) { try { localStorage.setItem('cg_' + k, JSON.stringify(v)); } catch (e) { toast('No se pudo guardar en este navegador'); } },
+  set(k, v) {
+    const txt = JSON.stringify(v);
+    try { localStorage.setItem('cg_' + k, txt); return; } catch (e) { /* espacio lleno */ }
+    // El navegador (sobre todo Safari) da poco espacio: se liberan las imágenes en caché
+    // (están en la nube y se vuelven a bajar solas) y se reintenta.
+    liberarCacheImagenes();
+    try { localStorage.setItem('cg_' + k, txt); }
+    catch (e) {   // con nube es solo una copia local: no se avisa
+      let conNube = true; try { conNube = !!NUBE_URL; } catch (_) {}
+      if (!conNube) toast('No se pudo guardar en este navegador (espacio lleno)');
+    }
+  },
 };
+function liberarCacheImagenes() {
+  try {
+    const borrar = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('cg_img_')) borrar.push(k); }
+    borrar.forEach(k => localStorage.removeItem(k));
+  } catch (_) {}
+}
 
 let CFG = Object.assign({}, CONFIG_DEF, Store.get('config', {}));
 // Migración: las condiciones antiguas eran texto; ahora plazo/validez son números y por defecto van en blanco.
@@ -303,7 +321,11 @@ function imgDe(id) {
   try { const v = localStorage.getItem('cg_img_' + id); if (v) { IMGS.set(id, v); return v; } } catch (_) {}
   return null;
 }
-function guardarImgLocal(id, data) { IMGS.set(id, data); try { localStorage.setItem('cg_img_' + id, data); } catch (_) {} }
+function guardarImgLocal(id, data) {
+  IMGS.set(id, data);   // en memoria siempre; en el navegador solo si hay espacio
+  try { localStorage.setItem('cg_img_' + id, data); }
+  catch (_) { liberarCacheImagenes(); try { localStorage.setItem('cg_img_' + id, data); } catch (__) {} }
+}
 /* Trae desde la nube las imágenes que este equipo todavía no tiene. */
 async function asegurarImagenes(items) {
   const faltan = [...new Set((items || []).map(i => i.imagen).filter(Boolean))].filter(id => !imgDe(id));
