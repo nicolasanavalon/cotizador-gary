@@ -23,6 +23,9 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - **Argollas:** `argollas = cantidad × precio por argolla` (precio editable). Cantidad según la
   Tabla Confección del taller (ARGOLLAS_DEF en app.js); si la medida no está, misma regla de m²
   (más cercana, proporción) **redondeada al entero más cercano**.
+- **Argollas:** precio por argolla $200.
+- **Cortado:** según tarifado de corte (CORTADO_DEF en app.js, valores revisados); si la medida
+  no está, misma regla de m² que el armado (más cercana, proporción).
 - Sin tabla de "valores de referencia" (hora calandra, etc.): el dueño no la quiere.
 - El costo unitario siempre se puede escribir a mano.
 

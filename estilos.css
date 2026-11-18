@@ -534,3 +534,5 @@ table.comp th.calc input{max-width:90px;font-weight:800;border-color:#6d8fb3}
 
 table.comp td.arg .cant{font-weight:700}
 table.comp td.arg .cant.est{color:#8a6814}
+
+table.comp td.arg .est{color:#8a6814}

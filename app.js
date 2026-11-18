@@ -51,14 +51,20 @@ const MEDIDAS_TARIFARIO = [
     ['16,00 x 10,67', 105000], ['17,00 x 11,33', 120000], ['18,00 x 12,00', 135000]]],
 ];
 /* La tela se calcula con fórmula (una columna por tela); el resto se escribe por medida. */
-const COMP_COLS = [
-  ['armado', 'Armado'], ['cortado', 'Cortado'], ['varios', 'Varios']];
+const COMP_COLS = [['armado', 'Armado'], ['varios', 'Varios']];
 const TELAS_DEF = [{ nombre: 'Bistrech', precio: 730 }, { nombre: 'Raso', precio: 0 }, { nombre: 'Microperforado', precio: 0 }, { nombre: 'Oxford', precio: 0 }];
 const FORMULA_TELA_DEF = { divisor: 1.4, factor: 1.2 };
 const SUBLIMADO_DEF = { precio: 2800, caras: 2 };
 const HUINCHA_DEF = { precio: 350, extra: 0.10 };
 /* Cantidad de argollas por medida (Tabla Confección del taller, may-25). */
-const ARGOLLAS_DEF = { precio: 0, tabla: [
+/* Tarifado de corte (Producción operarios, valores revisados). Medidas con el número mayor primero. */
+const CORTADO_DEF = { tabla: [
+  ['0,30 x 0,20', 400], ['0,60 x 0,40', 700], ['0,70 x 0,50', 1000], ['0,76 x 0,61', 700], ['0,80 x 0,70', 800],
+  ['0,90 x 0,40', 1000], ['1,20 x 0,80', 800], ['1,22 x 1,00', 900], ['1,50 x 1,00', 1000], ['1,80 x 1,20', 1000],
+  ['2,00 x 1,40', 1100], ['2,10 x 1,40', 1100], ['2,25 x 1,50', 1100], ['2,25 x 1,70', 1100], ['2,40 x 1,60', 1100],
+  ['2,45 x 0,70', 1100], ['2,45 x 0,90', 1100], ['2,55 x 1,70', 1100], ['3,00 x 2,00', 1200], ['4,50 x 3,00', 1300],
+  ['5,00 x 3,33', 1400], ['6,00 x 4,00', 1680], ['18,00 x 12,00', 18000]] };
+const ARGOLLAS_DEF = { precio: 200, tabla: [
   ['0,30 x 0,20', 3], ['0,60 x 0,40', 3], ['0,76 x 0,61', 3], ['0,80 x 0,54', 3], ['0,90 x 0,60', 3], ['1,00 x 0,66', 3],
   ['1,20 x 0,80', 3], ['1,28 x 0,84', 3], ['1,50 x 1,00', 3], ['1,70 x 1,12', 4], ['1,80 x 1,20', 4], ['2,10 x 1,40', 4],
   ['2,25 x 1,50', 4], ['2,55 x 1,70', 4], ['3,00 x 2,00', 5], ['4,00 x 2,66', 6], ['4,50 x 3,00', 6], ['5,00 x 3,33', 6],
@@ -1388,8 +1394,13 @@ function cantidadArgollas(medida) {
   return r.estimado ? { n: Math.round(r.costoRef * r.factor), estimado: true, ref: r.ref } : { n: r.costo, estimado: false };
 }
 function costoArgollas(medida) { return cantidadArgollas(medida).n * (+compArg().precio || 0); }
+const compCor = () => { const cd = compData(); if (!cd.cortado) cd.cortado = JSON.parse(JSON.stringify(CORTADO_DEF)); return cd.cortado; };
+/* Cortado: valor del tarifado; si la medida no está, misma regla de m² que el armado (más cercana, proporción). */
+function infoCortado(medida) {
+  return estimarPorM2(normMedida(medida), compCor().tabla.map(([md, v]) => ({ medida: md, costo: v }))) || { costo: 0 };
+}
 function compTotal(tipo, m, tela = COMP_TELA) {
-  return costoTela(tela, m.medida) + (llevaSublimado(tipo) ? costoSublimado(m.medida) : 0) + costoHuincha(m.medida) + costoArgollas(m.medida)
+  return costoTela(tela, m.medida) + (llevaSublimado(tipo) ? costoSublimado(m.medida) : 0) + costoHuincha(m.medida) + costoArgollas(m.medida) + infoCortado(m.medida).costo
     + COMP_COLS.reduce((s, [k]) => s + compValor(tipo, m, k), 0);
 }
 /* Costo por componentes de cualquier medida (misma regla: si no está, se estima por m² desde la más cercana). */
@@ -1409,6 +1420,10 @@ function celdaArg(medida) {
   const a = cantidadArgollas(medida), c = costoArgollas(medida);
   return `<span class="cant ${a.estimado ? 'est' : ''}" title="${a.estimado ? 'Estimado por m² desde ' + esc(a.ref) : 'Según tabla de confección'}">${a.n} u.${a.estimado ? '*' : ''}</span>${c ? ' · ' + clp(c) : ''}`;
 }
+function celdaCor(medida) {
+  const c = infoCortado(medida);
+  return `<span class="${c.estimado ? 'est' : ''}" title="${c.estimado ? 'Estimado por m² desde ' + esc(c.ref) + ' (' + clp(c.costoRef) + ' × ' + fmtFactor(c.factor) + ')' : 'Según tarifado de corte'}">${clp(c.costo)}${c.estimado ? '*' : ''}</span>`;
+}
 function renderComp() {
   const cd = compData();
   if (!COMP_TIPO || !CFG.tipos.includes(COMP_TIPO)) COMP_TIPO = CFG.tipos[0];
@@ -1423,12 +1438,13 @@ function renderComp() {
   $('#compLlevaSub').checked = sub;
   let grupo = '';
   const filas = cd.medidas.map((m, i) => {
-    const cab = m.grupo !== grupo ? (grupo = m.grupo, `<tr class="grupo"><td colspan="${COMP_COLS.length + telas.length + 5}">${esc(m.grupo)}</td></tr>`) : '';
+    const cab = m.grupo !== grupo ? (grupo = m.grupo, `<tr class="grupo"><td colspan="${COMP_COLS.length + telas.length + 6}">${esc(m.grupo)}</td></tr>`) : '';
     return cab + `<tr data-i="${i}"><td class="med">${esc(m.medida.replace(' x ', ' × '))}</td>
       ${telas.map(t => `<td class="num tela ${t.nombre === COMP_TELA ? 'sel' : ''}" data-tela-celda="${esc(t.nombre)}">${costoTela(t.nombre, m.medida) ? clp(costoTela(t.nombre, m.medida)) : '<span class="cero">—</span>'}</td>`).join('')}
       <td class="num calc ${sub ? '' : 'off'}" data-sub-celda>${sub ? clp(costoSublimado(m.medida)) : '<span class="cero">no lleva</span>'}</td>
       <td class="num calc" data-hui-celda>${clp(costoHuincha(m.medida))}</td>
       <td class="num calc arg" data-arg-celda>${celdaArg(m.medida)}</td>
+      <td class="num calc arg" data-cor-celda>${celdaCor(m.medida)}</td>
       ${COMP_COLS.map(([k]) => { const v = compValor(COMP_TIPO, m, k);
         return `<td class="num"><input data-money inputmode="numeric" data-col="${k}" value="${v ? miles(v) : ''}" placeholder="0"></td>`; }).join('')}
       <td class="num tot">${clp(compTotal(COMP_TIPO, m))}</td></tr>`;
@@ -1440,8 +1456,9 @@ function renderComp() {
       <th class="num calc"><span class="lbl-precio">precio</span><input data-money inputmode="numeric" id="compSubPrecio" value="${miles(compSub().precio)}"></th>
       <th class="num calc"><span class="lbl-precio">precio metro</span><input data-money inputmode="numeric" id="compHuiPrecio" value="${miles(compHui().precio)}"></th>
       <th class="num calc"><span class="lbl-precio">precio argolla</span><input data-money inputmode="numeric" id="compArgPrecio" value="${miles(compArg().precio)}" placeholder="0"></th>
+      <th class="num calc"><span class="lbl-precio">tarifado</span><span class="lbl-precio">de corte</span></th>
       ${COMP_COLS.map(([, l]) => `<th class="num" rowspan="2">${l}</th>`).join('')}<th class="num" rowspan="2">Costo total<br><small>con ${esc(COMP_TELA)}</small></th></tr>
-    <tr>${telas.map(t => `<th class="num tela ${t.nombre === COMP_TELA ? 'sel' : ''}">Tela ${esc(t.nombre)}</th>`).join('')}<th class="num calc">Sublimado</th><th class="num calc">Huincha</th><th class="num calc">Argollas</th></tr>
+    <tr>${telas.map(t => `<th class="num tela ${t.nombre === COMP_TELA ? 'sel' : ''}">Tela ${esc(t.nombre)}</th>`).join('')}<th class="num calc">Sublimado</th><th class="num calc">Huincha</th><th class="num calc">Argollas</th><th class="num calc">Cortado</th></tr>
   </thead><tbody>${filas}</tbody>`;
 }
 function subirComp() {
@@ -1469,6 +1486,7 @@ function refrescarTelas() {
     tr.querySelectorAll('[data-tela-celda]').forEach(td => { const v = costoTela(td.dataset.telaCelda, m.medida); td.innerHTML = v ? clp(v) : '<span class="cero">—</span>'; });
     const th = tr.querySelector('[data-hui-celda]'); if (th) th.textContent = clp(costoHuincha(m.medida));
     const ta = tr.querySelector('[data-arg-celda]'); if (ta) ta.innerHTML = celdaArg(m.medida);
+    const tc = tr.querySelector('[data-cor-celda]'); if (tc) tc.innerHTML = celdaCor(m.medida);
     const ts = tr.querySelector('[data-sub-celda]');
     if (ts) ts.innerHTML = llevaSublimado(COMP_TIPO) ? clp(costoSublimado(m.medida)) : '<span class="cero">no lleva</span>';
     tr.querySelector('.tot').textContent = clp(compTotal(COMP_TIPO, m));
