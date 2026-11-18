@@ -21,11 +21,12 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - **Huincha:** `huincha = (lado menor + 0,10 m) × precio por metro` (precio editable, $350;
   ej. 1,50 × 1,00 → 1,10 × 350 = $385).
 - **Argollas:** `argollas = cantidad × precio por argolla` (precio editable). Cantidad según la
-  Tabla Confección del taller (ARGOLLAS_DEF en app.js); si la medida no está, misma regla de m²
-  (más cercana, proporción) **redondeada al entero más cercano**.
+  Tabla Confección del taller (ARGOLLAS_DEF en app.js); si la medida no está, se **interpola**
+  entre la medida de abajo y la de arriba según m² (`interpolarPorM2`), **redondeada al entero**.
 - **Argollas:** precio por argolla $200.
 - **Cortado:** según tarifado de corte (CORTADO_DEF en app.js, valores revisados); si la medida
-  no está, misma regla de m² que el armado (más cercana, proporción).
+  no está, se **interpola** entre la de abajo y la de arriba según m² (decisión del dueño, para que
+  nunca baje al crecer la bandera). Fuera del rango del cuadro se usa la proporción de m².
 - Sin tabla de "valores de referencia" (hora calandra, etc.): el dueño no la quiere.
 - El costo unitario siempre se puede escribir a mano.
 

@@ -627,6 +627,21 @@ function estimarPorM2(medida, filas) {
   const factor = a / areaDe(ref.medida);
   return { costo: Math.round(+ref.costo * factor), estimado: true, ref: ref.medida, costoRef: +ref.costo, factor };
 }
+/* Para ARGOLLAS y CORTADO (decisión del dueño): medida que no está → se interpola entre la medida
+   de abajo y la de arriba según los m². Fuera del rango del cuadro, se usa estimarPorM2. */
+function interpolarPorM2(medida, filas) {
+  const a = areaDe(medida); if (!a) return null;
+  const exacta = filas.find(f => f.medida === medida && +f.costo > 0);
+  if (exacta) return { costo: +exacta.costo, estimado: false };
+  const v = filas.filter(f => +f.costo > 0 && areaDe(f.medida) > 0).map(f => ({ ...f, a: areaDe(f.medida) }));
+  const abajo = v.filter(f => f.a <= a).sort((x, y) => y.a - x.a)[0];
+  const arriba = v.filter(f => f.a >= a).sort((x, y) => x.a - y.a)[0];
+  if (!abajo || !arriba) { const r = estimarPorM2(medida, filas); return r && { ...r, modo: 'proporcion' }; }
+  if (abajo.a === arriba.a) return { costo: (+abajo.costo + +arriba.costo) / 2, estimado: true, modo: 'interpolado', abajo: abajo.medida, arriba: arriba.medida };
+  const t = (a - abajo.a) / (arriba.a - abajo.a);
+  return { costo: +abajo.costo + (+arriba.costo - +abajo.costo) * t, estimado: true, modo: 'interpolado',
+    abajo: abajo.medida, arriba: arriba.medida, vAbajo: +abajo.costo, vArriba: +arriba.costo };
+}
 const fmtFactor = f => f.toLocaleString('es-CL', { maximumFractionDigits: 2 });
 /* Costo de un producto según la matriz (exacto o estimado por m²). null si no hay con qué calcular. */
 function costoInfo(it) {
@@ -1389,15 +1404,16 @@ function costoHuincha(medida) {
 const compArg = () => { const cd = compData(); if (!cd.argollas) cd.argollas = JSON.parse(JSON.stringify(ARGOLLAS_DEF)); return cd.argollas; };
 /* Cantidad de argollas: la del cuadro; si la medida no está, misma regla de m² (más cercana, proporción) redondeada al entero. */
 function cantidadArgollas(medida) {
-  const r = estimarPorM2(normMedida(medida), compArg().tabla.map(([md, n]) => ({ medida: md, costo: n })));
+  const r = interpolarPorM2(normMedida(medida), compArg().tabla.map(([md, n]) => ({ medida: md, costo: n })));
   if (!r) return { n: 0 };
-  return r.estimado ? { n: Math.round(r.costoRef * r.factor), estimado: true, ref: r.ref } : { n: r.costo, estimado: false };
+  return { ...r, n: Math.round(r.costo) };
 }
 function costoArgollas(medida) { return cantidadArgollas(medida).n * (+compArg().precio || 0); }
 const compCor = () => { const cd = compData(); if (!cd.cortado) cd.cortado = JSON.parse(JSON.stringify(CORTADO_DEF)); return cd.cortado; };
 /* Cortado: valor del tarifado; si la medida no está, misma regla de m² que el armado (más cercana, proporción). */
 function infoCortado(medida) {
-  return estimarPorM2(normMedida(medida), compCor().tabla.map(([md, v]) => ({ medida: md, costo: v }))) || { costo: 0 };
+  const r = interpolarPorM2(normMedida(medida), compCor().tabla.map(([md, v]) => ({ medida: md, costo: v })));
+  return r ? { ...r, costo: Math.round(r.costo) } : { costo: 0 };
 }
 function compTotal(tipo, m, tela = COMP_TELA) {
   return costoTela(tela, m.medida) + (llevaSublimado(tipo) ? costoSublimado(m.medida) : 0) + costoHuincha(m.medida) + costoArgollas(m.medida) + infoCortado(m.medida).costo
@@ -1416,13 +1432,15 @@ function renderCompCalc() {
     ? `<b>${esc(med)}</b> = ${fmtFactor(areaDe(med))} m² → no está en la tabla. Más cercana: <b>${esc(r.ref)}</b> (${fmtFactor(areaDe(r.ref))} m², ${clp(r.costoRef)}) × ${fmtFactor(r.factor)} = <b class="res">${clp(r.costo)}</b>`
     : `<b>${esc(med)}</b> está en la tabla: <b class="res">${clp(r.costo)}</b>`;
 }
+const origenEst = (r, exacto) => !r.estimado ? exacto
+  : r.modo === 'interpolado' ? `Interpolado entre ${r.abajo} y ${r.arriba}` : `Proporción de m² desde ${r.ref}`;
 function celdaArg(medida) {
   const a = cantidadArgollas(medida), c = costoArgollas(medida);
-  return `<span class="cant ${a.estimado ? 'est' : ''}" title="${a.estimado ? 'Estimado por m² desde ' + esc(a.ref) : 'Según tabla de confección'}">${a.n} u.${a.estimado ? '*' : ''}</span>${c ? ' · ' + clp(c) : ''}`;
+  return `<span class="cant ${a.estimado ? 'est' : ''}" title="${esc(origenEst(a, 'Según tabla de confección'))}">${a.n} u.${a.estimado ? '*' : ''}</span>${c ? ' · ' + clp(c) : ''}`;
 }
 function celdaCor(medida) {
   const c = infoCortado(medida);
-  return `<span class="${c.estimado ? 'est' : ''}" title="${c.estimado ? 'Estimado por m² desde ' + esc(c.ref) + ' (' + clp(c.costoRef) + ' × ' + fmtFactor(c.factor) + ')' : 'Según tarifado de corte'}">${clp(c.costo)}${c.estimado ? '*' : ''}</span>`;
+  return `<span class="${c.estimado ? 'est' : ''}" title="${esc(origenEst(c, 'Según tarifado de corte'))}">${clp(c.costo)}${c.estimado ? '*' : ''}</span>`;
 }
 function renderComp() {
   const cd = compData();
