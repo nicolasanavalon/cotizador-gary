@@ -42,7 +42,9 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   tela = (largo × alto) ÷ 1,4 × 1,2 × precio tela; crea = tela/12 (1 faz); extra tela = tela (2/Faz);
   vaina, argollas, armado (×1), cortado/festón/limpieza/embolsado = % del armado; sublimado =
   extra tela × 2 × precio; Subtotal A; flete 20 % + costo financiero 7 % + imprevisto 7 % = Subtotal B;
-  costo = A + B. **"Margen" del Excel = recargo sobre el costo** (precio = costo × (1 + %)); se muestra
+  costo = A + B. La columna Cantidad acepta **fórmulas tipo Excel** (`=(1,5*1)/1,4*1,2`, `=tela/12`,
+  `=extra*2`): al pinchar se ve la fórmula, al salir el resultado. El cuadro llega solo hasta el
+  Total A + B (el margen se elige en la tarjeta del producto). **"Margen" del Excel = recargo sobre el costo** (precio = costo × (1 + %)); se muestra
   además el margen real sobre venta. Sin costo hasta que se costea.
 
 ## Imágenes

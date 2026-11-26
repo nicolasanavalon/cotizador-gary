@@ -995,15 +995,16 @@ function tradDefaults(it) {
   const telaCant = dm.mayor * dm.menor / 1.4 * 1.2;          // Excel: ((largo × alto) / 1,4) × 1,2
   const extra = dfaz ? telaCant : 0;
   const r2 = x => Math.round(x * 100) / 100;
+  const n = x => String(r2(x)).replace('.', ',');
   return {
-    tela: { cant: telaCant, costo: precioTela },
-    crea: { cant: dfaz ? 0 : telaCant / 12, costo: precioTela },
-    extra: { cant: extra, costo: precioTela },
+    tela: { cant: telaCant, f: `=(${n(dm.mayor)}*${n(dm.menor)})/1,4*1,2`, costo: precioTela },
+    crea: { cant: dfaz ? 0 : telaCant / 12, f: dfaz ? null : '=tela/12', costo: precioTela },
+    extra: { cant: extra, f: dfaz ? '=tela' : null, costo: precioTela },
     vaina: { cant: r2(dm.menor * 2 + 0.1), costo: td.vaina },
     argollas: { cant: medidaEf(it) ? cantidadArgollas(medidaEf(it)).n : 0, costo: td.argolla },
     armado: { cant: 1, costo: td.armado },
     cortado: { cant: td.cortado }, feston: { cant: dfaz ? 0 : td.feston }, limpieza: { cant: td.limpieza }, embolsado: { cant: td.embolsado },
-    sublimado: { cant: extra * 2, costo: td.sublimado },
+    sublimado: { cant: extra * 2, f: '=extra*2', costo: td.sublimado },
     flete: td.flete, finan: td.finan, imprev: td.imprev,
   };
 }
@@ -1018,9 +1019,34 @@ function calcTrad(t) {
   const subB = flete + finan + imprev;
   return { pu, subA, flete, finan, imprev, subB, total: subA + subB };
 }
+/* Fórmulas tipo Excel en la columna Cantidad: números con coma decimal, + − × ÷ y paréntesis,
+   y nombres de otras filas (tela, crea, extra, vaina, argollas, armado, sublimado). Ej.: =(1,5*1)/1,4*1,2 · =tela/12 */
+function evalCant(expr, ctx) {
+  let s = String(expr).trim().replace(/^=/, '').replace(/\s+/g, '').replace(/(\d),(\d)/g, '$1.$2').replace(/×/g, '*').replace(/([\d)])x(?=[\d(])/gi, '$1*').replace(/÷/g, '/');
+  s = s.replace(/[a-záéíóúñ_]+/gi, w => {
+    const k = normTxt(w).replace('extratela', 'extra');
+    if (k in ctx) return '(' + ctx[k] + ')';
+    throw new Error(`No reconozco "${w}". Usa números o: ${Object.keys(ctx).join(', ')}`);
+  });
+  if (!s || !/^[\d.+\-*/()]+$/.test(s)) throw new Error('Fórmula no válida');
+  const v = Function('"use strict";return (' + s + ')')();
+  if (!isFinite(v)) throw new Error('La fórmula no da un número');
+  return v;
+}
+/* Recalcula en orden las filas que tienen fórmula; devuelve las filas con error. */
+function recalcFormulas(t) {
+  const ctx = {}, errores = {};
+  for (const [k, , tipo] of TRAD_FILAS) {
+    if (tipo === 'pct') continue;
+    if (t[k].f) { try { t[k].cant = evalCant(t[k].f, ctx); } catch (e) { errores[k] = e.message; } }
+    ctx[k] = +t[k].cant || 0;
+  }
+  return errores;
+}
 let TR = null;
 function abrirTrad(it) {
-  TR = { it, t: JSON.parse(JSON.stringify(it.trad || tradDefaults(it))), recargo: +it.recargo || tradDef().recargo };
+  TR = { it, t: JSON.parse(JSON.stringify(it.trad || tradDefaults(it))), errores: {} };
+  TR.errores = recalcFormulas(TR.t);
   $('#trTitulo').textContent = it.titulo || tituloAuto(it) || 'Producto';
   $('#trSub').textContent = [esBandera(it) ? it.tipo : productoEf(it), materialEf(it), medidaEf(it), (+it.cantidad || 0) + ' u.'].filter(Boolean).join(' · ');
   renderTrad();
@@ -1034,7 +1060,8 @@ function renderTrad(soloNumeros) {
     $('#trFilas').innerHTML = TRAD_FILAS.map(([k, l, tipo]) => {
       const f = t[k];
       const cant = tipo === 'pct' ? `<input class="pct" data-tr="${k}" data-c="cant" value="${fmtPct(f.cant)}" inputmode="decimal"><span>%</span>`
-        : `<input data-tr="${k}" data-c="cant" value="${fmtCant(f.cant)}" inputmode="decimal">`;
+        : `<span class="fx-wrap"><i class="fx" title="Tiene fórmula: pincha para verla" ${f.f ? '' : 'hidden'}>ƒx</i><input class="cant ${f.f ? 'con-fx' : ''} ${TR.errores[k] ? 'err' : ''}" data-tr="${k}" data-c="cant"
+            value="${fmtCant(f.cant)}" title="${esc(TR.errores[k] || (f.f ? 'Fórmula: ' + f.f : 'Puedes escribir una fórmula, ej: =(1,5*1)/1,4*1,2'))}"></span>`;
       const costo = tipo === 'pct' ? `<span class="ref" data-ref="${k}"></span>` : `<input data-money data-tr="${k}" data-c="costo" value="${miles(f.costo)}" inputmode="numeric">`;
       return `<tr><th>${l}${k === 'tela' && materialEf(TR.it) ? ` <small>${esc(materialEf(TR.it))}</small>` : ''}</th><td>${cant}</td><td>${costo}</td><td class="pu" data-pu="${k}"></td></tr>`;
     }).join('') +
@@ -1042,17 +1069,12 @@ function renderTrad(soloNumeros) {
       [['flete', 'Flete'], ['finan', 'Costo financiero'], ['imprev', 'Imprevisto']].map(([k, l]) =>
         `<tr><th>${l}</th><td><input class="pct" data-trp="${k}" value="${fmtPct(t[k])}" inputmode="decimal"><span>%</span></td><td></td><td class="pu" data-pu="${k}"></td></tr>`).join('') +
       `<tr class="sub"><th>Subtotal B</th><td></td><td></td><td class="pu" id="trSubB"></td></tr>`;
-    if (document.activeElement !== $('#trRecargo')) $('#trRecargo').value = fmtPct(TR.recargo / 100);
   }
   for (const [k] of TRAD_FILAS) $(`#trFilas [data-pu="${k}"]`).textContent = clp(c.pu[k]);
   for (const k of ['cortado', 'feston', 'limpieza', 'embolsado']) $(`#trFilas [data-ref="${k}"]`).textContent = clp(c.pu[k]);
   for (const k of ['flete', 'finan', 'imprev']) $(`#trFilas [data-pu="${k}"]`).textContent = clp(c[k]);
   $('#trSubA').textContent = clp(c.subA); $('#trSubB').textContent = clp(c.subB);
   $('#trTotal').textContent = clp(c.total);
-  const precio = precioRecargo(c.total, TR.recargo);
-  $('#trMargen').textContent = clp(c.total * TR.recargo / 100);
-  $('#trPrecio').textContent = clp(precio);
-  $('#trReal').textContent = precio ? pct((precio - c.total) / precio) : '0%';
 }
 const numDec = v => { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; };
 $('#dlgTrad').addEventListener('input', e => {
@@ -1061,24 +1083,50 @@ $('#dlgTrad').addEventListener('input', e => {
   if (el.dataset.tr) {
     const f = TR.t[el.dataset.tr];
     if (el.dataset.c === 'costo') f.costo = num(el.value);
-    else f.cant = el.classList.contains('pct') ? numDec(el.value) / 100 : numDec(el.value);
+    else if (el.classList.contains('pct')) f.cant = numDec(el.value) / 100;
+    else return;                       // cantidad (puede ser fórmula): se procesa al salir de la celda
   } else if (el.dataset.trp) TR.t[el.dataset.trp] = numDec(el.value) / 100;
-  else if (el.id === 'trRecargo') TR.recargo = numDec(el.value);
   else return;
   renderTrad(true);
 });
+/* Cantidad: al entrar se ve la fórmula; al salir se calcula y se muestra el resultado */
+$('#dlgTrad').addEventListener('focusin', e => {
+  const el = e.target; if (!el.matches('input.cant')) return;
+  const f = TR.t[el.dataset.tr]; el.value = f.f || fmtCant(f.cant); el.select();
+});
+$('#dlgTrad').addEventListener('focusout', e => {
+  const el = e.target; if (!el.matches('input.cant') || !TR) return;
+  const f = TR.t[el.dataset.tr], v = el.value.trim();
+  if (v.startsWith('=')) f.f = v;                  // fórmula
+  else { f.f = null; f.cant = numDec(v); }        // número: reemplaza la fórmula
+  TR.errores = recalcFormulas(TR.t);
+  if (TR.errores[el.dataset.tr]) toast(TR.errores[el.dataset.tr]);
+  refrescarCants(); renderTrad(true);
+});
+/* Actualiza las celdas de cantidad sin redibujar la tabla (para no perder el foco al pasar de una a otra). */
+function refrescarCants() {
+  $$('#trFilas input.cant').forEach(inp => {
+    const k = inp.dataset.tr, f = TR.t[k];
+    if (document.activeElement !== inp) inp.value = fmtCant(f.cant);
+    inp.classList.toggle('con-fx', !!f.f); inp.classList.toggle('err', !!TR.errores[k]);
+    inp.title = TR.errores[k] || (f.f ? 'Fórmula: ' + f.f : 'Puedes escribir una fórmula, ej: =(1,5*1)/1,4*1,2');
+    const icon = inp.parentElement.querySelector('.fx');
+    if (icon) icon.hidden = !f.f;
+  });
+}
+$('#dlgTrad').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input.cant')) { e.preventDefault(); e.target.blur(); } });
 $('#trCancelar').onclick = () => $('#dlgTrad').close();
-$('#trDefecto').onclick = () => { TR.t = tradDefaults(TR.it); renderTrad(); };
+$('#trDefecto').onclick = () => { TR.t = tradDefaults(TR.it); TR.errores = recalcFormulas(TR.t); renderTrad(); };
 $('#trGuardarDef').onclick = () => {
   const t = TR.t;
   CFG.tradDef = { tela: t.tela.costo, vaina: t.vaina.costo, argolla: t.argollas.costo, armado: t.armado.costo, sublimado: t.sublimado.costo,
-    cortado: t.cortado.cant, limpieza: t.limpieza.cant, embolsado: t.embolsado.cant, flete: t.flete, finan: t.finan, imprev: t.imprev, recargo: TR.recargo };
+    cortado: t.cortado.cant, limpieza: t.limpieza.cant, embolsado: t.embolsado.cant, flete: t.flete, finan: t.finan, imprev: t.imprev, recargo: tradDef().recargo };
   saveCfg(); subirConfig({ tradDef: CFG.tradDef }).then(() => toast('Valores por defecto guardados'), err => toast('No se pudo guardar: ' + err.message));
   if (!nubeActiva()) toast('Valores por defecto guardados');
 };
 $('#trAplicar').onclick = () => {
   const it = TR.it, c = calcTrad(TR.t);
-  it.trad = TR.t; it.costo = Math.round(c.total); it.recargo = TR.recargo; it.costoManual = false; it.desglose = null;
+  it.trad = TR.t; it.costo = Math.round(c.total); it.recargo = it.recargo || tradDef().recargo; it.costoManual = false; it.desglose = null;
   $('#dlgTrad').close(); renderItems();
 };
 
