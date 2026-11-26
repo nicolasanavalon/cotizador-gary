@@ -58,7 +58,10 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   **Sin imágenes repetidas:** cada imagen tiene una firma visual (`firmaImagen`); si se sube una que ya
   está, se usa la existente. Las repetidas se fusionan en una sola entrada (nombres, clientes y usos
   sumados; ids antiguos en `a`). Imágenes casi iguales con otro nombre (ej. "Puerto Talca"/"Puerto
-  Tepual") no se fusionan. La cotización y la OT dicen que las imágenes son referenciales.
+  Tepual") no se fusionan.
+  **Revisión diaria del panel:** una tarea programada corre todos los días
+  `herramientas/sincronizar_imagenes.py URL_PANEL` y sube las fotos nuevas del panel de producción
+  (cada fila se revisa una vez; Config `panelVistos`). Si la foto ya existe, solo suma uso/nombre/cliente/OT. La cotización y la OT dicen que las imágenes son referenciales.
 
 ## Precios y margen
 - El margen es **sobre el precio de venta**: `precio = costo / (1 − margen)`, redondeado hacia arriba.
