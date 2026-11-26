@@ -290,8 +290,9 @@ function cargarNube() {
       }
       if (!(j.matriz || []).length) await api('guardarMatriz', { matriz: MATRIZ, ejemplo: MATRIZ_EJEMPLO });
       else MATRIZ = j.matriz.map(r => ({ ...r, medida: normMedida(r.medida) }));
-      COTS = (j.cotizaciones || []).sort((a, b) => b.numero - a.numero);
-      OTS = (j.ots || []).sort((a, b) => b.numero - a.numero);
+      const orden = (a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')) || (+b.numero || 0) - (+a.numero || 0);
+      COTS = (j.cotizaciones || []).sort(orden);
+      OTS = (j.ots || []).sort(orden);
       Store.set('config', CFG); saveMatriz(); saveCots(); saveOts();
       return true;
     } catch (e) { toast('No se pudo actualizar: ' + e.message); return false; }
@@ -844,6 +845,8 @@ function mostrar(view) {
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   if (view === 'cotizaciones') renderCotizaciones();
+  if (view === 'panel') renderPanel();
+  if (view === 'facturas') renderFacturas();
   if (view === 'ots') renderOts();
   if (view === 'matriz') { renderMatriz(); renderComp(); }
   if (view === 'config') renderConfig();
@@ -1499,11 +1502,13 @@ async function guardarCotizacion(opciones = {}) {
   snap.totales = totalesGuardables(snap);
   snap.actualizado = new Date().toISOString();
   if (!D.id) {
-    Object.assign(snap, { id: uid(), numero: null, estado: 'Pendiente', fecha: hoy() });
+    Object.assign(snap, { id: uid(), numero: null, estado: 'Borrador', fecha: hoy() });
   } else {
     const prev = COTS.find(c => c.id === D.id);
-    snap.estado = prev?.estado || D.estado || 'Pendiente';
+    snap.estado = prev?.estado || D.estado || 'Borrador';
     if (prev?.otNumero) snap.otNumero = prev.otNumero;
+    // lo que se registra desde las listas (envío, aprobación, factura, pagos) no se pisa al guardar el editor
+    for (const k of CAMPOS_CICLO) if (prev && prev[k] !== undefined) snap[k] = prev[k];
     // Si ya se le había enviado el PDF al cliente y cambió algo, pasa a ser versión "actualizada" (N°-1, N°-2…)
     if (prev?.pdf && firmaCot(prev) !== firmaCot(snap)) { snap.version = (+prev.version || 0) + 1; snap.pdf = false; }
   }
@@ -2082,27 +2087,39 @@ $('#btnOtPdf').onclick = conBoton($('#btnOtPdf'), async () => { if (await guarda
 window.addEventListener('resize', () => { if ($('#dlgOt').open) vistaOt(); });
 
 /* ---------------- Lista de cotizaciones ---------------- */
+let FILTRO_COT = '';
 function renderCotizaciones() {
   const q = ($('#buscaCot').value || '').toLowerCase();
-  const rows = COTS.filter(c => !q || String(c.numero).includes(q) || (c.cliente.nombre || '').toLowerCase().includes(q));
+  const conEstado = COTS.map(c => ({ c, e: estadoCot(c) }));
+  const cuenta = e => conEstado.filter(x => x.e === e).length;
+  $('#filtrosCot').innerHTML = [['', 'Todas', COTS.length], ...ESTADOS_COT.map(e => [e, e === 'Enviada' ? 'Enviadas' : e === 'Borrador' ? 'Borradores' : e + 's', cuenta(e)])]
+    .map(([v, l, n]) => `<button type="button" class="chip ${FILTRO_COT === v ? 'active' : ''}" data-filtro="${v}">${l} <small>${n}</small></button>`).join('');
+  const rows = conEstado.filter(({ c, e }) => (!FILTRO_COT || e === FILTRO_COT) &&
+    (!q || String(c.numero).toLowerCase().includes(q) || (c.cliente.nombre || '').toLowerCase().includes(q)));
   if (!rows.length) { $('#tablaCot').innerHTML = `<tr><td class="empty">${COTS.length ? 'Sin resultados.' : 'Aún no hay cotizaciones guardadas.'}</td></tr>`; return; }
-  $('#tablaCot').innerHTML = `<thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th class="num">Neto</th><th class="num">Total bruto</th><th class="num">Margen</th><th>Estado</th><th></th></tr></thead><tbody>` +
-    rows.map(c => { const t = c.totales; const ot = OTS.find(o => o.cotId === c.id);
-      return `<tr data-id="${c.id}"><td><b>${numDoc(c)}</b></td><td>${fechaCL(c.fecha)}</td><td>${esc(c.cliente.nombre)}</td>
+  $('#tablaCot').innerHTML = `<thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th class="num">Neto</th><th class="num">Total bruto</th><th class="num">Margen</th><th>Estado</th><th>Siguiente paso</th><th></th></tr></thead><tbody>` +
+    rows.map(({ c, e }) => { const t = c.totales || {}; const ot = OTS.find(o => o.cotId === c.id); const fe = estadoFactura(c);
+      const paso = e === 'Borrador' ? '<button class="btn sm" data-a="enviada">✉ Marcar enviada</button>'
+        : e === 'Enviada' || e === 'Vencida' ? '<button class="btn sm ok" data-a="aprobar">✓ Aprobar</button> <button class="btn sm ghost" data-a="rechazar">Rechazar</button>'
+        : e === 'Aprobada' ? `${ot ? `<span class="paso">OT ${esc(ot.numero)} · ${esc(ot.estado)}</span>` : ''} <a href="#" class="paso-fact ${fe.clase}" data-a="facturacion">${esc(fe.texto)}</a>`
+        : `<small class="muted">${esc(c.motivoRechazo || '')}</small>`;
+      return `<tr data-id="${c.id}"><td><b>${esc(numDoc(c))}</b>${c.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${fechaCL(c.fecha)}</td><td>${esc(c.cliente.nombre)}</td>
       <td class="num">${clp(t.neto)}</td><td class="num">${clp(t.bruto)}</td><td class="num">${clp(t.margen)} · ${pct(t.margenPct)}</td>
-      <td><span class="badge ${c.estado}">${c.estado}</span>${ot ? ` <small>OT ${ot.numero}</small>` : ''}</td>
+      <td><span class="badge ${e}">${e}</span>${e === 'Enviada' && c.fechaEnvio ? `<br><small class="muted">enviada ${fechaCL(c.fechaEnvio)}</small>` : ''}</td>
+      <td class="paso-cel">${paso}</td>
       <td class="acc">
         <button class="btn sm" data-a="abrir">Abrir</button>
         <button class="btn sm" data-a="pdf">PDF</button>
-        ${c.estado !== 'Aprobada' ? '<button class="btn sm ok" data-a="aprobar">Aprobar</button>' : ''}
-        ${c.estado === 'Pendiente' ? '<button class="btn sm ghost" data-a="rechazar">Rechazar</button>' : ''}
         <button class="btn sm ghost" data-a="duplicar">Duplicar</button>
         <button class="btn sm ghost danger" data-a="borrar">Borrar</button></td></tr>`; }).join('') + '</tbody>';
 }
+$('#filtrosCot').addEventListener('click', e => { const b = e.target.closest('[data-filtro]'); if (!b) return; FILTRO_COT = b.dataset.filtro; renderCotizaciones(); });
 $('#buscaCot').oninput = renderCotizaciones;
 $('#tablaCot').addEventListener('click', async e => {
   const a = e.target.dataset.a; if (!a) return;
-  if (['rechazar', 'borrar', 'aprobar'].includes(a)) {
+  if (a === 'facturacion') { e.preventDefault(); mostrar('facturas'); return; }
+  if (a === 'enviada' || a === 'aprobar' || a === 'rechazar') { pasoCot(a, e.target.closest('tr').dataset.id); return; }
+  if (['borrar'].includes(a)) {
     if (e.target.disabled) return;
     e.target.disabled = true;
     try { await accionCot(a, e.target.closest('tr').dataset.id); }
@@ -2135,19 +2152,9 @@ async function accionCot(a, id) {
   }
   if (a === 'aprobar') {
     let ot = OTS.find(o => o.cotId === c.id);
-    if (!ot) {
-      ot = { id: uid(), numero: null, fecha: hoy(), cotId: c.id, cotNumero: c.numero, cotDoc: numDoc(c),
-        cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
-        entrega: esNumero(c.plazo) ? sumarDiasHabiles(hoy(), +c.plazo) : '', oc: '', idInterno: c.idExterno || '', obsTaller: '',
-        envio: { modo: c.despacho?.modo || '', destino: c.despacho?.calc?.destino || '',
-          cajas: (c.despacho?.calc?.cajas || []).map(x => `${x.n} × ${x.nombre}`).join(' + ') },
-        despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
-        items: c.items.map(x => normalizarItem({ ...x })).map(({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen }) =>
-          ({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen,
-            dfaz: /2\/Faz/i.test(tipo || '') || /doble faz|d\/faz/i.test(obs || ''), aplicado: /aplicaci/i.test(tipo || ''), notaTaller: '' })),
-        estado: 'Pendiente' };
-    }
+    if (!ot) ot = otDesdeCot(c);
     if (nubeActiva()) {
+      await api('guardarCot', { cot: c });     // guarda N° OC y fecha de aprobación antes de aprobar
       const j = await api('aprobar', { id: c.id, ot });
       Object.assign(c, j.cot); ot = j.ot;
     } else {
@@ -2161,13 +2168,26 @@ async function accionCot(a, id) {
   }
   saveCots(); renderCotizaciones();
 }
+function otDesdeCot(c, fecha) {
+  fecha = fecha || hoy();
+  return { id: uid(), numero: null, fecha, cotId: c.id, cotNumero: c.numero, cotDoc: numDoc(c),
+        cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
+        entrega: esNumero(c.plazo) ? sumarDiasHabiles(fecha, +c.plazo) : '', oc: c.oc || '', idInterno: c.idExterno || '', obsTaller: '',
+        envio: { modo: c.despacho?.modo || '', destino: c.despacho?.calc?.destino || '',
+          cajas: (c.despacho?.calc?.cajas || []).map(x => `${x.n} × ${x.nombre}`).join(' + ') },
+        despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
+        items: c.items.map(x => normalizarItem({ ...x })).map(({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen }) =>
+          ({ producto, productoOtro, tipo, material, materialOtro, medida, medidaOtra, vaina, titulo, cantidad, obs, imagen,
+            dfaz: /2\/Faz/i.test(tipo || '') || /doble faz|d\/faz/i.test(obs || ''), aplicado: /aplicaci/i.test(tipo || ''), notaTaller: '' })),
+        estado: 'Pendiente' };
+}
 
 /* ---------------- Órdenes de trabajo ---------------- */
-const ESTADOS_OT = ['Pendiente', 'En producción', 'Terminada'];
+const ESTADOS_OT = ['Pendiente', 'En producción', 'Terminada', 'Despachada', 'Entregada'];
 function renderOts() {
   if (!OTS.length) { $('#tablaOt').innerHTML = '<tr><td class="empty">Aún no hay OTs. Se crean solas al aprobar una cotización.</td></tr>'; return; }
   $('#tablaOt').innerHTML = `<thead><tr><th>OT</th><th>Fecha</th><th>Entrega</th><th>Cliente</th><th>Cotización</th><th>Productos</th><th>Estado</th><th></th></tr></thead><tbody>` +
-    OTS.map(o => `<tr data-id="${o.id}"><td><b>${o.numero}</b></td><td>${fechaCL(o.fecha)}</td><td><b>${otEntrega(o) ? fechaCL(otEntrega(o)) : '—'}</b></td><td>${esc(o.cliente.nombre)}</td>
+    OTS.map(o => `<tr data-id="${o.id}" class="${otAtrasada(o) ? 'atrasada' : ''}"><td><b>${esc(o.numero)}</b>${o.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${fechaCL(o.fecha)}</td><td><b>${otEntrega(o) ? fechaCL(otEntrega(o)) : '—'}</b>${otAtrasada(o) ? '<br><small class="atraso">atrasada</small>' : ''}</td><td>${esc(o.cliente.nombre)}</td>
       <td>N° ${esc(o.cotDoc || o.cotNumero)}</td><td>${o.items.reduce((s, i) => s + (+i.cantidad || 0), 0)} u.</td>
       <td><select data-a="estado">${ESTADOS_OT.map(s => opt(s, o.estado)).join('')}</select></td>
       <td class="acc"><button class="btn sm" data-a="abrir">Abrir</button> <button class="btn sm" data-a="pdf">Imprimir / PDF</button>
@@ -2186,7 +2206,7 @@ $('#tablaOt').addEventListener('click', async e => {
 $('#tablaOt').addEventListener('change', async e => {
   if (e.target.dataset.a !== 'estado') return;
   const o = OTS.find(x => x.id === e.target.closest('tr').dataset.id); const antes = o.estado;
-  o.estado = e.target.value;
+  o.estado = e.target.value; marcarFechaOt(o);
   try { if (nubeActiva()) await api('guardarOt', { ot: o }); saveOts(); toast(`OT ${o.numero}: ${o.estado}`); }
   catch (err) { o.estado = antes; e.target.value = antes; toast('No se pudo guardar: ' + err.message); }
 });

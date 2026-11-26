@@ -10,9 +10,11 @@
 <header class="topbar no-print">
   <div class="brand"><img src="logo-compacto.png" alt="Gary"><span>Cotizador</span></div>
   <nav id="tabs">
+    <button data-view="panel">Panel</button>
     <button data-view="cotizar" class="active">Cotizar</button>
     <button data-view="cotizaciones">Cotizaciones</button>
     <button data-view="ots">Órdenes de trabajo</button>
+    <button data-view="facturas">Facturación</button>
     <button data-view="matriz">Matriz de costos</button>
     <button data-view="config">Configuración</button>
   </nav>
@@ -119,6 +121,8 @@
       <h1>Cotizaciones</h1>
       <input id="buscaCot" class="search" placeholder="Buscar por número o cliente">
     </div>
+    <div class="flujo-hint">Borrador → <b>Enviada</b> → <b>Aprobada</b> (crea la OT) → producción → entrega → <b>Factura</b> → <b>Pago</b></div>
+    <div class="chips filtros" id="filtrosCot"></div>
     <div class="card table-wrap"><table class="list" id="tablaCot"></table></div>
   </section>
 
@@ -126,6 +130,22 @@
   <section id="view-ots" class="view">
     <div class="view-head"><h1>Órdenes de trabajo</h1></div>
     <div class="card table-wrap"><table class="list" id="tablaOt"></table></div>
+  </section>
+
+  <!-- ============ FACTURACIÓN ============ -->
+  <section id="view-facturas" class="view">
+    <div class="view-head"><h1>Facturación</h1></div>
+    <div id="factKpis" class="kpis"></div>
+    <div class="card aviso-sii">Integración con el sistema de facturación electrónica (SII): <b>próximamente</b>. Por ahora el N° de factura
+      se registra a mano y el cotizador lleva el control de lo facturado, lo cobrado y lo vencido.</div>
+    <div class="chips filtros" id="filtrosFact"></div>
+    <div class="card table-wrap"><table class="list" id="tablaFact"></table></div>
+  </section>
+
+  <!-- ============ PANEL ============ -->
+  <section id="view-panel" class="view">
+    <div class="view-head"><h1>Panel</h1><div class="chips" id="panelPeriodo"></div></div>
+    <div id="panelCuerpo"></div>
   </section>
 
   <!-- ============ MATRIZ ============ -->
@@ -320,6 +340,14 @@
   </div>
 </dialog>
 
+<dialog id="dlgForm" class="no-print">
+  <form method="dialog" id="formPaso">
+    <h2 id="formTitulo"></h2><p class="hint" id="formSub"></p>
+    <div id="formCampos" class="form-campos"></div>
+    <div class="actions"><button class="btn ghost" value="cancelar" formnovalidate>Cancelar</button><button class="btn primary" value="ok" id="formOk">Guardar</button></div>
+  </form>
+</dialog>
+
 <dialog id="dlgVista" class="no-print">
   <div class="vista-barra">
     <b id="vistaTitulo">Así la ve el cliente</b>
@@ -334,5 +362,6 @@
 
 <script src="despacho.js"></script>
 <script src="app.js"></script>
+<script src="panel.js"></script>
 </body>
 </html>

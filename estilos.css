@@ -662,3 +662,85 @@ table.comp td.arg .est{color:#8a6814}
 .pdf-fuera{position:fixed;left:-10000px;top:0;z-index:-1}
 .pdf-render{width:740px;background:#fff;color:#1d1d1f}
 .pdf-render .cot{max-width:none;margin:0}
+
+/* ---------- Flujo, facturación y panel ---------- */
+:root{--viz-1:#257de0;--viz-2:#f47230;--bad:#b42318;--bad-soft:#fdecea}
+.badge.Borrador{background:#eee;color:#555}
+.badge.Enviada{background:var(--warn-soft);color:var(--warn)}
+.badge.Vencida{background:var(--bad-soft);color:var(--bad)}
+.badge.Despachada,.badge.Entregada{background:var(--ok-soft);color:var(--ok)}
+.badge.Ejemplo{background:#efe7ff;color:#5b3fc4;font-size:10px;padding:1px 7px;vertical-align:middle}
+.badge.PorFacturar{background:#e6edf9;color:var(--blue)}
+.badge.PorCobrar{background:var(--warn-soft);color:var(--warn)}
+.badge.Pagada{background:var(--ok-soft);color:var(--ok)}
+.muted{color:var(--muted)}
+.flujo-hint{font-size:12.5px;color:var(--muted);margin:-6px 0 10px}
+.chips.filtros{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chips.filtros .chip small{color:inherit;opacity:.65;margin-left:2px}
+.paso-cel{white-space:nowrap}
+.paso{font-size:12px;color:var(--muted);margin-right:6px}
+.paso-fact{font-size:12px;font-weight:700;text-decoration:none;padding:2px 8px;border-radius:999px}
+.paso-fact.pf{background:#e6edf9;color:var(--blue)}.paso-fact.pend{background:var(--warn-soft);color:var(--warn)}
+.paso-fact.ok{background:var(--ok-soft);color:var(--ok)}.paso-fact.bad{background:var(--bad-soft);color:var(--bad)}
+tr.atrasada td{background:#fff7f5}
+.atraso{color:var(--bad);font-weight:700}
+.aviso-sii{font-size:13px;background:#f8f6f1;border-style:dashed}
+#dlgForm{max-width:440px;width:calc(100% - 32px);border:0;border-radius:14px;padding:22px}
+#dlgForm h2{margin:0 0 4px;font-size:18px}
+.form-campos{display:grid;gap:12px;margin:14px 0 18px}
+.form-campos label{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:13px}
+.form-campos input,.form-campos select{font:inherit;font-weight:500;padding:9px 10px;border:1px solid var(--line);border-radius:8px}
+#dlgForm .actions{display:flex;justify-content:flex-end;gap:8px}
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:3px}
+.kpi small{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.kpi b{font-size:24px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.kpi span{font-size:12.5px;color:var(--muted)}
+.kpi.ok b{color:var(--ok)}.kpi.bad{border-color:#f3c5c0;background:#fffafa}.kpi.bad b{color:var(--bad)}.kpi.warn{border-color:#f0dcae}
+.kpis.mini{grid-template-columns:repeat(3,1fr);gap:8px}.kpis.mini .kpi{padding:10px 12px}.kpis.mini .kpi b{font-size:17px}
+#view-panel .view-head{flex-wrap:wrap;gap:10px}
+#panelPeriodo{display:flex;gap:6px;flex-wrap:wrap}
+.viz-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media(max-width:900px){.viz-grid{grid-template-columns:1fr}}
+.viz-grid>.card{margin-bottom:0}.viz-grid+.viz-grid{margin-top:16px}
+.card h3{margin:0 0 2px;font-size:15px}
+.viz .hint{margin:0 0 10px}
+.leyenda{display:flex;gap:14px;font-size:12.5px;color:var(--ink);margin-bottom:4px}
+.leyenda span{display:flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}.sw.a{background:var(--viz-1)}.sw.b{background:var(--viz-2)}
+.grafico{width:100%;height:auto;display:block}
+.grafico .grid{stroke:#ece9e2;stroke-width:1}
+.grafico .ax{font-size:11px;fill:var(--muted)}
+.grafico .s-a{fill:var(--viz-1)}.grafico .s-b{fill:var(--viz-2)}
+.grafico .hit{fill:transparent;cursor:default;outline:none}
+.grafico .hit:hover,.grafico .hit:focus{fill:rgba(29,35,48,.05)}
+.tabla-datos{margin-top:8px;font-size:12.5px}.tabla-datos summary{cursor:pointer;color:var(--muted)}
+.hbars{display:flex;flex-direction:column;gap:7px}
+.hb{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;align-items:center;gap:10px;font-size:13px;border-radius:6px;padding:2px 4px;outline:none}
+.hb:hover,.hb:focus{background:rgba(29,35,48,.04)}
+.hb-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-t{height:12px;background:#f2f0eb;border-radius:4px;overflow:hidden}
+.hb-t i{display:block;height:100%;background:var(--viz-1);border-radius:0 4px 4px 0}
+.hb-v{font-variant-numeric:tabular-nums;text-align:right;min-width:64px}.hb-v small{color:var(--muted)}
+.embudo .hb-t i{background:var(--viz-1)}
+#vizTip{position:fixed;display:none;flex-direction:column;gap:2px;pointer-events:none;z-index:9999;background:#1d2330;color:#fff;
+  font-size:12.5px;padding:8px 10px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:280px}
+#vizTip b{font-weight:700}#vizTip span{opacity:.92}
+.alertas{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.alertas li{display:flex;flex-direction:column;gap:1px;padding:8px 12px;border-radius:8px;border-left:4px solid;cursor:pointer;font-size:13px}
+.alertas li span{color:var(--muted);font-size:12px}
+.alertas li.bad{border-color:var(--bad);background:#fff7f6}.alertas li.bad b::before{content:"⚠ ";color:var(--bad)}
+.alertas li.warn{border-color:#d9a21b;background:#fffbf0}.alertas li.warn b::before{content:"⏳ "}
+.alertas li.info{border-color:var(--viz-1);background:#f4f8fe}.alertas li.info b::before{content:"→ ";color:var(--viz-1)}
+.prod{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:10px 0 6px}
+.prod div{border:1px solid var(--line);border-radius:10px;padding:10px 8px;text-align:center}
+.prod b{display:block;font-size:22px}.prod span{font-size:11.5px;color:var(--muted)}
+.prod .cero b{color:#b8b4aa}
+@media(max-width:560px){.prod{grid-template-columns:repeat(3,1fr)}.kpi b{font-size:20px}}
+
+.badge{white-space:nowrap}
+#tablaCot td:nth-child(2),#tablaOt td:nth-child(2),#tablaOt td:nth-child(3),#tablaFact td:nth-child(7),#tablaFact td:nth-child(8),#tablaFact td:nth-child(5){white-space:nowrap}
+.kpi span b{font-size:inherit;color:inherit;letter-spacing:0}
+@media(min-width:1000px){#panelCuerpo>.kpis{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.kpi{padding:10px 12px}}
