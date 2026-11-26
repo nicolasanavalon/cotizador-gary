@@ -174,11 +174,13 @@ $('#tablaFact').addEventListener('click', async e => {
 
 /* ---------------- Panel de indicadores ---------------- */
 let PERIODO = 'anio';
-const PERIODOS = [['mes', 'Este mes'], ['3m', 'Últimos 3 meses'], ['anio', 'Este año'], ['todo', 'Todo']];
+const PERIODOS = [['mes', 'Este mes'], ['m3', 'Últimos 3 meses'], ['anio', 'Este año'], ['todo', 'Todo']];
+const MESES_ELEGIBLES = [2, 4, 5, 6, 9, 12, 18, 24];
+const etiquetaPeriodo = p => (PERIODOS.find(x => x[0] === p) || [])[1] || (/^m\d+$/.test(p) ? `Últimos ${p.slice(1)} meses` : '');
 function desdePeriodo(p) {
   const h = hoy(), y = +h.slice(0, 4), m = +h.slice(5, 7);
   if (p === 'mes') return h.slice(0, 7) + '-01';
-  if (p === '3m') { const d = new Date(y, m - 3, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; }
+  if (/^m\d+$/.test(p)) { const d = new Date(y, m - +p.slice(1), 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; }
   if (p === 'anio') return `${y}-01-01`;
   return '';
 }
@@ -196,10 +198,13 @@ function datosPanel() {
   return { desde, cots, aprob, rech, env, suma };
 }
 function renderPanel() {
-  $('#panelPeriodo').innerHTML = PERIODOS.map(([k, l]) => `<button type="button" class="chip ${PERIODO === k ? 'active' : ''}" data-per="${k}">${l}</button>`).join('');
+  const otroN = /^m\d+$/.test(PERIODO) && PERIODO !== 'm3' ? +PERIODO.slice(1) : 0;
+  $('#panelPeriodo').innerHTML = PERIODOS.map(([k, l]) => `<button type="button" class="chip ${PERIODO === k ? 'active' : ''}" data-per="${k}">${l}</button>`).join('') +
+    `<label class="chip per-otro ${otroN ? 'active' : ''}">Últimos <select id="perMeses" aria-label="Cantidad de meses">
+      <option value="">…</option>${MESES_ELEGIBLES.map(n => `<option value="${n}" ${otroN === n ? 'selected' : ''}>${n}</option>`).join('')}</select> meses</label>`;
   const { desde, cots, aprob, rech, env: envP, suma } = datosPanel();
   if (!COTS.length) { $('#panelCuerpo').innerHTML = '<div class="card empty">Todavía no hay cotizaciones. Los indicadores aparecen a medida que se cotiza.</div>'; return; }
-  const etqPer = (PERIODOS.find(p => p[0] === PERIODO) || [])[1] || '';
+  const etqPer = etiquetaPeriodo(PERIODO);
   const conDesde = extra => desde ? { ...extra, desde, etiqueta: [extra.etiqueta, etqPer.toLowerCase()].filter(Boolean).join(' · ') } : extra;
   const acc = o => `data-accion="${esc(JSON.stringify(o))}" tabindex="0"`;
   const enviadasP = [...aprob, ...rech, ...envP], decididas = enviadasP.length;   // tasa sobre lo enviado al cliente
@@ -224,7 +229,11 @@ function renderPanel() {
 
   // por mes (últimos 6 meses, por fecha de la cotización)
   const h = hoy(), y = +h.slice(0, 4), m = +h.slice(5, 7);
-  const meses = Array.from({ length: 6 }, (_, k) => { const d = new Date(y, m - 6 + k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
+  // meses del gráfico: los del período elegido ("este mes" muestra 6 para ver la tendencia; máximo 24)
+  const primera = COTS.reduce((a, c) => (!a || String(c.fecha) < a) ? String(c.fecha) : a, '');
+  const desdeG = desde || primera || hoy();
+  const nMeses = PERIODO === 'mes' ? 6 : Math.min(24, Math.max(2, (y - +desdeG.slice(0, 4)) * 12 + m - +desdeG.slice(5, 7) + 1));
+  const meses = Array.from({ length: nMeses }, (_, k) => { const d = new Date(y, m - nMeses + k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
   const porMes = meses.map(mm => {
     const del = COTS.filter(c => String(c.fecha).startsWith(mm));
     const ap = del.filter(c => estadoCot(c) === 'Aprobada');
@@ -261,7 +270,7 @@ function renderPanel() {
   $('#panelCuerpo').innerHTML = `
     <div class="kpis seis">${kpis}</div>
     <div class="viz-grid">
-      <div class="card viz"><h3>Cotizado y aprobado por mes</h3><p class="hint">Neto, según la fecha de la cotización · <b>pincha una barra</b> para ver esas cotizaciones</p>
+      <div class="card viz"><h3>Cotizado y aprobado por mes</h3><p class="hint">Neto, según la fecha de la cotización · últimos ${meses.length} meses · <b>pincha una barra</b> para ver esas cotizaciones</p>
         <div class="leyenda"><span><i class="sw a"></i>Cotizado</span><span><i class="sw b"></i>Aprobado</span></div>
         ${graficoMeses(porMes, acc)}
         <details class="tabla-datos"><summary>Ver datos</summary><table class="list"><thead><tr><th>Mes</th><th class="num">Cotizado</th><th class="num">Aprobado</th><th class="num">N°</th></tr></thead>
@@ -328,6 +337,7 @@ function graficoMeses(datos, acc) {
   return `<svg viewBox="0 0 ${W} ${H}" class="grafico" role="img" aria-label="Cotizado y aprobado por mes">${g}</svg>`;
 }
 $('#panelPeriodo').addEventListener('click', e => { const b = e.target.closest('[data-per]'); if (!b) return; PERIODO = b.dataset.per; renderPanel(); });
+$('#panelPeriodo').addEventListener('change', e => { if (e.target.id === 'perMeses' && e.target.value) { PERIODO = 'm' + e.target.value; renderPanel(); } });
 const accionPanel = e => { const el = e.target.closest('[data-accion]'); if (!el) return; e.preventDefault(); document.getElementById('vizTip').style.display = 'none'; ejecutarAccion(JSON.parse(el.dataset.accion)); };
 $('#panelCuerpo').addEventListener('click', accionPanel);
 $('#panelCuerpo').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') accionPanel(e); });
@@ -455,14 +465,16 @@ const enFiltroProd = (f, filtro) => filtro === 'todas' || (filtro === 'curso' &&
 const esChile = f => /chile|pab\.?\s*nac|pabell[oó]n nacional/i.test(f.producto);
 /* Producción: la misma tabla del panel de producción del taller, en solo lectura. */
 function renderProduccion() {
+  if (!PROD) PROD = produccionDesdeCopia();
   if (!PROD) {
     $('#prodKpis').innerHTML = ''; $('#filtrosProd').innerHTML = '';
-    $('#prodCuerpo').innerHTML = PROD_ERROR
+    $('#prodCuerpo').innerHTML = PROD_ERROR && !PROD_FONDO
       ? `<div class="card empty">No se pudo leer el panel de producción (${esc(PROD_ERROR)}). <a href="${PANEL_PROD_WEB}" target="_blank" rel="noopener">Abrir el panel de producción ↗</a> · <a href="#" data-prod-recargar>Reintentar</a></div>`
-      : '<div class="card empty"><span class="spinner"></span> Leyendo el panel de producción… (trae todas las fotos, puede tardar unos segundos)</div>';
-    if (!PROD_ERROR) cargarProduccion().then(renderProduccion, renderProduccion);
+      : '<div class="card empty"><span class="spinner"></span> Leyendo el panel de producción por primera vez en este equipo… (las próximas veces se ve al instante)</div>';
+    if (!PROD_FONDO) iniciarProduccion().then(() => { if (PROD && vistaActual() === 'produccion') renderProduccion(); });
     return;
   }
+  if (!PROD_FONDO && minutosDesde(PROD.hora) > 2) setTimeout(refrescarProduccionFondo, 50);   // trae lo último sin hacer esperar
   const filas = PROD.filas, vig = filas.filter(f => !f.entregada);
   const otsVig = new Set(vig.map(f => f.ot)), atr = new Set(vig.filter(f => f.fCom && f.fCom < hoy()).map(f => f.ot));
   const sem = new Set(vig.filter(f => f.fCom >= hoy() && f.fCom <= sumarDias(hoy(), 7)).map(f => f.ot));
@@ -486,16 +498,16 @@ function renderProduccion() {
       <button type="button" class="${PROD_CHILE ? 'on' : ''}" data-tprod="chile" title="Solo banderas chilenas">🇨🇱</button></span>
     <span class="seg">${ETQ_PROD.map(([k, l]) => `<button type="button" class="${FILTRO_PROD === k ? 'on' : ''}" data-fprod="${k}">${l}</button>`).join('')}</span>
     ${FILTRO_PROD === 'atrasadas' || FILTRO_PROD === 'semana' ? `<span class="filtro-extra">${FILTRO_PROD === 'atrasadas' ? 'Solo atrasadas' : 'Próximos 7 días'} <button type="button" data-fprod="curso">✕</button></span>` : ''}
-    <span class="prod-act">${vis.length} fila${vis.length === 1 ? '' : 's'} · actualizado ${PROD.hora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · <a href="#" data-prod-recargar>actualizar</a> · <a href="${PANEL_PROD_WEB}" target="_blank" rel="noopener">abrir panel de producción ↗</a></span>`;
+    <span class="prod-act">${vis.length} fila${vis.length === 1 ? '' : 's'} · ${PROD_FONDO ? '<span class="spinner"></span>actualizando…' : `al ${PROD.hora.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })} ${PROD.hora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · <a href="#" data-prod-recargar>actualizar</a>`} · <a href="${PANEL_PROD_WEB}" target="_blank" rel="noopener">abrir panel de producción ↗</a></span>`;
   const check = v => `<span class="ck ${v ? 'on' : ''}">${v ? '✓' : ''}</span>`;
-  let prev = null;
+  let prev = null; const faltan = new Set();
   const filasHtml = vis.slice(0, 400).map(f => {
     const dif = f.fCom ? diasEntre(hoy(), f.fCom) : null, corte = prev !== null && prev !== f.ot; prev = f.ot;
     return `<tr class="${corte ? 'corte' : ''} ${f.entregada ? 'entregada' : ''}">
       <td class="ot">${esc(f.ot)}</td><td class="cli">${esc(f.cliente)}</td><td>${esc(f.comuna)}</td>
       <td class="nw">${fechaCL(f.fCom) || '—'}</td>
       <td class="num dif ${dif != null && dif < 0 && !f.entregada ? 'neg' : ''}">${f.entregada ? '✓' : dif ?? ''}</td>
-      <td class="foto">${f.foto ? `<img src="${f.foto}" alt="" loading="lazy">` : ''}</td>
+      <td class="foto">${(src => src ? `<img src="${src}" alt="" loading="lazy">` : (f.img && faltan.add(f.img), ''))(f.foto || imgDe(f.img))}</td>
       <td class="prodn">${esc(f.producto)}</td><td class="nw">${esc(f.medida)}</td><td>${esc(f.tela)}</td>
       <td class="num">${f.cant}</td><td class="c">${check(f.sublimada)}</td><td class="c">${check(f.aplicada)}</td>
       <td class="obs">${esc(f.obs)}</td><td class="status">${esc(f.etapa)}</td></tr>`;
@@ -505,12 +517,16 @@ function renderProduccion() {
         <th class="num">Cant</th><th class="c">Subli</th><th class="c">Apli</th><th>Obs</th><th>Status</th></tr></thead><tbody>${filasHtml}</tbody></table></div>
       ${vis.length > 400 ? '<p class="hint">Se muestran las primeras 400 filas. Usa el buscador para encontrar otras.</p>' : ''}`
     : '<div class="card empty">No hay filas en este filtro.</div>';
+  if (faltan.size && !renderProduccion.trayendo) {   // miniaturas de la copia liviana
+    renderProduccion.trayendo = true;
+    asegurarImagenes([...faltan].map(imagen => ({ imagen }))).then(ok => { renderProduccion.trayendo = false; if (ok && vistaActual() === 'produccion') renderProduccion(); });
+  }
 }
 $('#view-produccion').addEventListener('click', e => {
   const t = e.target.closest('[data-tprod]');
   if (t) { const k = t.dataset.tprod; if (k === 'subli') PROD_SUBLI = !PROD_SUBLI; if (k === 'apli') PROD_APLI = !PROD_APLI; if (k === 'chile') PROD_CHILE = !PROD_CHILE; renderProduccion(); return; }
   const f = e.target.closest('[data-fprod]'); if (f) { FILTRO_PROD = f.dataset.fprod; renderProduccion(); return; }
-  if (e.target.closest('[data-prod-recargar]')) { e.preventDefault(); PROD = null; PROD_ERROR = ''; renderProduccion(); }
+  if (e.target.closest('[data-prod-recargar]')) { e.preventDefault(); PROD_ERROR = ''; refrescarProduccionFondo(); }
 });
 $('#buscaProd').addEventListener('input', () => { if (PROD) renderProduccion(); });
 
@@ -522,3 +538,80 @@ document.addEventListener('click', e => { if (!e.target.closest('#ajustes')) $('
 
 /* La aplicación parte en el Panel. */
 if (vistaActual() === 'panel') { document.body.dataset.vista = 'panel'; renderPanel(); }
+
+/* ---------- Producción rápida ----------
+   El panel de producción entrega todo junto (~8 MB con fotos). Para que se vea al instante:
+   1) se guarda la última lectura en el navegador (IndexedDB) y se muestra de inmediato;
+   2) se guarda en la nube del cotizador una copia liviana (sin fotos; usa las miniaturas de la biblioteca)
+      para que un equipo nuevo también la vea al tiro;
+   3) la lectura completa se hace en segundo plano y reemplaza lo mostrado cuando llega. */
+const IDB_NOMBRE = 'cotizador-gary', IDB_TABLA = 'cache';
+function idb(modo, fn) {
+  return new Promise((res, rej) => {
+    let req; try { req = indexedDB.open(IDB_NOMBRE, 1); } catch (e) { rej(e); return; }
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_TABLA);
+    req.onerror = () => rej(req.error);
+    req.onsuccess = () => {
+      const db = req.result, tx = db.transaction(IDB_TABLA, modo), r = fn(tx.objectStore(IDB_TABLA));
+      tx.oncomplete = () => { db.close(); res(r && r.result); }; tx.onerror = () => { db.close(); rej(tx.error); };
+    };
+  });
+}
+const idbLeer = k => idb('readonly', s => s.get(k)).catch(() => null);
+const idbGuardar = (k, v) => idb('readwrite', s => s.put(v, k)).catch(() => null);
+const minutosDesde = d => (Date.now() - new Date(d).getTime()) / 60000;
+
+async function sha1Hex(txt) {
+  const b = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(txt));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+/* Copia liviana para la nube: sin fotos, con la miniatura equivalente de la biblioteca. */
+async function subirCopiaProduccion(filas) {
+  if (!nubeActiva() || !window.crypto?.subtle) return;
+  const porId = new Map(); for (const e of biblioteca()) for (const x of [e.i, ...(e.a || [])]) porId.set(x, e.t || e.i);
+  const livianas = [];
+  for (const f of filas) {
+    let img = '';
+    if (f.foto) { const id = 'ot' + (await sha1Hex(f.foto)).slice(0, 14); img = porId.get(id) || ''; }
+    livianas.push([f.ot, f.cliente, f.comuna, f.producto, f.cant, f.medida, f.tela, f.etapa, f.obs, f.fCom, f.entregada ? 1 : 0, f.sublimada ? 1 : 0, f.aplicada ? 1 : 0, img]);
+  }
+  const txt = JSON.stringify(livianas), firma = (await sha1Hex(txt)).slice(0, 16);
+  if (CFG.prodFirma === firma) return;
+  const partes = []; for (let i = 0; i < txt.length; i += 35000) partes.push(txt.slice(i, i + 35000));
+  const cfg = { prodFirma: firma, prodHora: new Date().toISOString(), prodPartes: partes.length, prodSubli: PROD?.enSublimacion || 0 };
+  partes.forEach((p, i) => cfg['prod' + i] = p);
+  for (let i = partes.length; i < (+CFG.prodPartes || 0); i++) cfg['prod' + i] = null;
+  Object.assign(CFG, cfg);
+  subirConfig(cfg).catch(() => {});
+}
+function produccionDesdeCopia() {
+  const n = +CFG.prodPartes || 0; if (!n) return null;
+  try {
+    let txt = ''; for (let i = 0; i < n; i++) txt += CFG['prod' + i] || '';
+    const filas = JSON.parse(txt).map(r => ({ ot: r[0], cliente: r[1], comuna: r[2], producto: r[3], cant: r[4], medida: r[5], tela: r[6], etapa: r[7], obs: r[8],
+      fCom: r[9], entregada: !!r[10], sublimada: !!r[11], aplicada: !!r[12], foto: '', img: r[13] || '' }));
+    return { filas, enSublimacion: +CFG.prodSubli || 0, hora: new Date(CFG.prodHora || Date.now()), copia: true };
+  } catch (_) { return null; }
+}
+let PROD_FONDO = false;
+async function refrescarProduccionFondo() {
+  if (PROD_FONDO) return; PROD_FONDO = true;
+  if (vistaActual() === 'produccion' && PROD) renderProduccion();
+  try {
+    const p = await cargarProduccion(true);
+    idbGuardar('produccion', { filas: p.filas, enSublimacion: p.enSublimacion, hora: p.hora.toISOString() });
+    subirCopiaProduccion(p.filas).catch(() => {});
+  } catch (_) { /* se queda con lo que había */ }
+  PROD_FONDO = false;
+  if (vistaActual() === 'produccion') renderProduccion();
+}
+/* Al abrir la app: muestra lo guardado y, si es viejo, trae lo nuevo en segundo plano. */
+async function iniciarProduccion() {
+  if (!PROD) {
+    const g = await idbLeer('produccion');
+    if (g && Array.isArray(g.filas)) PROD = { filas: g.filas, enSublimacion: g.enSublimacion || 0, hora: new Date(g.hora), cache: true };
+    else PROD = produccionDesdeCopia();
+  }
+  if (!PROD || minutosDesde(PROD.hora) > 10) refrescarProduccionFondo();
+}
+setTimeout(() => { iniciarProduccion().catch(() => {}); }, 1500);

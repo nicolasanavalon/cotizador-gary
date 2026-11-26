@@ -103,13 +103,14 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   **Aprobada** (pide N° OC del cliente y fecha; crea la OT) o **Rechazada** (solo confirma). **Sin estado "Vencida"
   y sin motivos de rechazo** (el dueño no los quiere: los clientes en general no responden). Las antiguas
   "Pendiente" se muestran como Enviada. Tasa de aprobación = aprobadas ÷ enviadas al cliente.
-- Tabla de OT: OT, ID, fecha, entrega, cliente, productos, **neto y margen $** (de la cotización), estado.
+- Tabla de cotizaciones: ID, ID MP, Fecha, Cliente, Neto, Margen %, Margen $, Estado, acciones.
+- Tabla de OT (cabe en una pantalla): OT, ID interna, **OC**, fecha, entrega, cliente, prod., **neto y margen $** (de la cotización), estado, acciones.
 - OT: Pendiente → En producción → Terminada → Despachada → Entregada (se guardan las fechas). Atrasada = pasó la
   fecha de entrega y no está terminada.
 - **Facturación**: ventas aprobadas → "Emitir factura" (N° a mano, fecha, días de crédito según condición de pago,
   monto neto editable para anticipos) → "Registrar pago". Estados: Por facturar, Por cobrar, Vencida, Pagada.
   Se guarda en `cot.factura`. Integración con SII pendiente.
-- **La aplicación abre en el Panel.** Menú: Panel · Cotizar · Cotizaciones · Órdenes de trabajo · Producción ·
+- **La aplicación abre en el Panel.** El logo Gary (arriba a la izquierda, sin la palabra "Cotizador") lleva siempre al Panel. Menú: Panel · Cotizar · Cotizaciones · Órdenes de trabajo · Producción ·
   Facturación; Matriz de costos y Configuración van dentro de **⚙ Ajustes** (arriba a la derecha).
 - **Panel** (KPI, interactivo tipo Power BI): cotizado, vendido, tasa de aprobación, margen de lo vendido, venta
   promedio y **por cobrar** (sin "días para aprobar", "en carpeta", embudo ni cuadro de producción: el dueño no los quiere).
@@ -117,11 +118,15 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   tipo de producto** (según el tipo elegido en las listas, no el nombre escrito), requiere atención, ventas por región.
   **Todo se puede pinchar**: lleva a Cotizaciones (o Facturación/OT) con el filtro aplicado ("Filtro del panel ✕").
   Ese filtro es solo de esa vista: **al entrar por el menú la lista parte sin filtros**.
+  Período: Este mes / Últimos 3 meses / Este año / Todo / **Últimos N meses** (2, 4, 5, 6, 9, 12, 18, 24); el gráfico por mes
+  muestra los meses del período.
 - **Producción** (solo lectura): lee el panel de producción del taller (https://nicolasanavalon.github.io/taller-gary/,
   su PROD_SYNC_URL, la misma que usa la revisión diaria de imágenes) y lo muestra **igual que su tabla**: ID, Cliente,
   Comuna, F. comp., Dif (días, rojo si está atrasada), Foto, Producto, Medida, Tela, Cant, Subli, Apli, Obs, Status;
   línea dorada entre OT; filtros Subli / Apli / 🇨🇱 y Vigentes / Entregadas / Todo; buscador. Arriba: OT vigentes,
   atrasadas, se entregan en 7 días, por sublimar, cola de sublimación. **Nunca escribe** en el panel de producción.
+  **Carga al instante**: la última lectura queda en el navegador (IndexedDB) y una copia liviana sin fotos (con miniaturas
+  de la biblioteca) en Config `prodPartes`/`prod0..n`; la lectura completa (~8 MB) se hace en segundo plano.
 - **Facturación**: se puede **adjuntar el archivo de la factura** y el **comprobante de pago** (PDF o foto, máx. 4 MB;
   se guardan en la hoja Imagenes como `fac…`/`pag…`; `cot.factura.archivo` / `cot.factura.comprobante`).
 - Cotizaciones: sin columna "Siguiente paso"; Enviada / Aprobar / Rechazar van junto a Abrir, PDF, Duplicar, Borrar.

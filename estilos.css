@@ -819,3 +819,22 @@ body[data-vista="cotizaciones"] main,body[data-vista="ots"] main,body[data-vista
 .ck.on{background:#f3f1ec}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #d9d4c9;border-top-color:#b08930;border-radius:50%;animation:gira .8s linear infinite;vertical-align:-2px;margin-right:6px}
 @keyframes gira{to{transform:rotate(360deg)}}
+
+/* logo = inicio */
+a.brand{text-decoration:none;border-radius:10px;padding:6px 8px;margin-left:-8px}
+a.brand:hover{background:#f3f1ec}
+.per-otro select{border:0;background:transparent;font:inherit;font-weight:700;padding:0 2px;cursor:pointer}
+/* OT: cabe en una pantalla */
+#tablaOt th,#tablaOt td{padding-left:8px;padding-right:8px;font-size:13.5px}
+#tablaOt td:nth-child(3){max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tablaOt td:nth-child(6){min-width:180px}
+#tablaOt select{padding:5px 6px;font-size:13px;max-width:140px}
+#tablaOt .btn.sm{padding:4px 9px}
+#tablaOt td:nth-child(4),#tablaOt td:nth-child(5){white-space:nowrap}
+#tablaCot td:nth-child(3){white-space:nowrap}
+#tablaCot td:nth-child(4){min-width:210px}
+#tablaCot td:nth-child(3){min-width:0}
+#tablaCot td:nth-child(4){white-space:normal}
+.chip.per-otro{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.chip.per-otro.active select{color:inherit}
+.chip.per-otro select{color:var(--ink)}
