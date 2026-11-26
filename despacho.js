@@ -91,6 +91,23 @@ const Envio = (() => {
     return { n: 0, estimada: true };
   }
 
+  const r1 = x => Math.round(x * 10) / 10;
+  /* Llena las cajas en orden con las banderas (las más grandes primero). Cada bandera ocupa 1/capacidad de la caja. */
+  function repartir(piezas, lista, tabla) {
+    const quedan = piezas.map(p => ({ ...p, q: p.cantidad })).sort((a, b) => b.area - a.area);
+    const out = lista.map(caja => {
+      let libre = 1; const lleva = [];
+      for (const p of quedan) {
+        if (!p.q) continue;
+        const cap = capacidad(caja, p.medida, p.area, tabla).n; if (cap < 1) continue;
+        const k = Math.min(p.q, Math.floor(libre * cap + 1e-9));
+        if (k > 0) { lleva.push({ medida: p.medida, area: p.area, n: k, cap }); p.q -= k; libre -= k / cap; }
+      }
+      return { caja, lleva };
+    });
+    return { cajas: out.filter(c => c.lleva.length), sobran: quedan.reduce((s, p) => s + p.q, 0) };
+  }
+
   /* Empaca TODO el pedido y elige la combinación de cajas más barata.
      piezas: [{ medida, area, cantidad }] · cajas: [{ id, nombre, largo, ancho, alto, pesoVacia, capM2 }] */
   function empacar(piezas, cajas, opts) {
@@ -110,40 +127,44 @@ const Envio = (() => {
       }
       return f;
     });
-    const kgBanderas = piezas.reduce((s, p) => s + p.cantidad * p.area * pesoM2, 0);
+    // Reparte las banderas en las cajas (las más grandes primero) y calcula cada caja con su peso real.
     const precio = (combo) => {
-      const nTot = combo.reduce((s, x) => s + x.n, 0);
+      const lista = [];
+      combo.filter(x => x.n > 0).forEach(x => { for (let k = 0; k < x.n; k++) lista.push(cajas[x.i]); });
+      const rep = repartir(piezas, lista, tabla);
+      if (rep.sobran) return null;
       let total = 0;
-      const det = combo.filter(x => x.n > 0).map(x => {
-        const c = cajas[x.i];
-        const kgFis = (+c.pesoVacia || 0) + kgBanderas / nTot;
-        const kg = Math.max(volumetrico(c), kgFis);
+      const det = rep.cajas.map(({ caja: c, lleva }) => {
+        const kgReal = (+c.pesoVacia || 0) + lleva.reduce((s, l) => s + l.n * l.area * pesoM2, 0);
+        const kgVol = volumetrico(c), kg = Math.max(kgVol, kgReal);
         const v = tarifa(servicio, destino, kg, secundaria);
-        total += (v ?? 0) * x.n;
-        return { id: c.id, nombre: c.nombre, n: x.n, kg: Math.round(kg * 10) / 10, unitario: v };
+        total += v ?? 0;
+        return { id: c.id, nombre: c.nombre, n: 1, kg: r1(kg), kgReal: r1(kgReal), kgVol: r1(kgVol), porVolumen: kgVol >= kgReal,
+          medidas: `${c.largo}×${c.ancho}×${c.alto}`, lleva: lleva.map(l => ({ medida: l.medida, n: l.n, cap: l.cap })), unitario: v };
       });
-      return { cajas: det, costo: total, nCajas: nTot };
+      return { cajas: det, costo: total, nCajas: lista.length };
     };
     const candidatos = [];
     cajas.forEach((_, b) => {
       if (!isFinite(fill[b])) return;
-      candidatos.push([{ i: b, n: Math.max(1, Math.ceil(fill[b] - 1e-9)) }]);
       const nb = Math.floor(fill[b] + 1e-9), r = fill[b] - nb;
+      for (let extra = 0; extra < 3; extra++) candidatos.push([{ i: b, n: Math.max(1, Math.ceil(fill[b] - 1e-9)) + extra }]);
       if (r > 1e-9) cajas.forEach((__, c) => {
         if (c === b || !isFinite(fill[c])) return;
         if (r * fill[c] / fill[b] <= 1 + 1e-9) candidatos.push([{ i: b, n: nb }, { i: c, n: 1 }]);
       });
     });
-    if (!candidatos.length) {
-      // Ninguna caja alcanza para alguna medida: una bandera por caja en la caja más grande.
-      const g = cajas.reduce((a, c, i) => volumetrico(c) > volumetrico(cajas[a]) ? i : a, 0);
-      avisos.push('Hay banderas que no caben en ninguna caja: se calculó una por caja en la más grande. Revisa las cajas.');
-      candidatos.push([{ i: g, n: piezas.reduce((s, p) => s + p.cantidad, 0) }]);
-    }
     let mejor = null;
     for (const c of candidatos) {
       const p = precio(c);
-      if (!mejor || p.costo < mejor.costo || (p.costo === mejor.costo && p.nCajas < mejor.nCajas)) mejor = p;
+      if (p && (!mejor || p.costo < mejor.costo || (p.costo === mejor.costo && p.nCajas < mejor.nCajas))) mejor = p;
+    }
+    if (!mejor) {
+      // Ninguna caja alcanza para alguna medida: una bandera por caja en la caja más grande.
+      const g = cajas.reduce((a, c, i) => volumetrico(c) > volumetrico(cajas[a]) ? i : a, 0), c = cajas[g];
+      avisos.push('Hay banderas que no caben en ninguna caja: se calculó una por caja en la más grande. Revisa las cajas.');
+      const n = piezas.reduce((s, p) => s + p.cantidad, 0), kg = volumetrico(c), v = tarifa(servicio, destino, kg, secundaria);
+      mejor = { cajas: [{ id: c.id, nombre: c.nombre, n, kg: r1(kg), unitario: v, lleva: [] }], costo: (v ?? 0) * n, nCajas: n };
     }
     if (estimada) avisos.push('Capacidad de cajas estimada por m²: confírmala en Configuración → Cajas.');
     return { ...mejor, avisos };
@@ -151,15 +172,23 @@ const Envio = (() => {
 
   /* Costo con cajas puestas a mano: { idCaja: cantidad } */
   function precioManual(manual, cajas, opts) {
-    const { servicio, destino, secundaria } = opts;
+    const { servicio, destino, secundaria, tabla, pesoM2 = 0.2 } = opts;
+    const piezas = (opts.piezas || []).filter(p => p.cantidad > 0 && p.area > 0);
+    const lista = [];
+    [...cajas].sort((a, b) => volumetrico(b) - volumetrico(a)).forEach(c => { for (let k = 0; k < (+manual[c.id] || 0); k++) lista.push(c); });
+    const rep = repartir(piezas, lista, tabla);
+    const vacias = lista.slice(rep.cajas.length).map(caja => ({ caja, lleva: [] }));
     let costo = 0;
-    const det = cajas.filter(c => +manual[c.id] > 0).map(c => {
-      const kg = Math.max(volumetrico(c), +c.pesoVacia || 0);
+    const det = rep.cajas.concat(vacias).map(({ caja: c, lleva }) => {
+      const kgReal = (+c.pesoVacia || 0) + lleva.reduce((s, l) => s + l.n * l.area * pesoM2, 0);
+      const kgVol = volumetrico(c), kg = Math.max(kgVol, kgReal);
       const v = tarifa(servicio, destino, kg, secundaria);
-      costo += (v ?? 0) * +manual[c.id];
-      return { id: c.id, nombre: c.nombre, n: +manual[c.id], kg: Math.round(kg * 10) / 10, unitario: v };
+      costo += v ?? 0;
+      return { id: c.id, nombre: c.nombre, n: 1, kg: r1(kg), kgReal: r1(kgReal), kgVol: r1(kgVol), porVolumen: kgVol >= kgReal,
+        medidas: `${c.largo}×${c.ancho}×${c.alto}`, lleva: lleva.map(l => ({ medida: l.medida, n: l.n, cap: l.cap })), unitario: v };
     });
-    return { cajas: det, costo, avisos: [] };
+    const avisos = rep.sobran ? [`En esas cajas no caben ${rep.sobran} bandera${rep.sobran === 1 ? '' : 's'}.`] : [];
+    return { cajas: det, costo, avisos };
   }
 
   return { DESTINOS, destinoDe, tarifa, empacar, precioManual, volumetrico };

@@ -76,6 +76,9 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - Correos de Chile, Paquete Express, origen Valparaíso/Viña (tarifas exentas de IVA).
 - Se calcula para el pedido completo (cajas del taller) y **nunca aparece como ítem** en la
   cotización: se prorratea en los precios y se muestra "Despacho gratis".
+- Detalle por caja (corto): medidas de la caja, qué banderas lleva ("10 de 1,50×1,00 (caben 19)"), cuánto
+  ocupa (%) y kg cobrado (el mayor entre peso real y volumen L×A×H÷4.000). Caben = m² que admite la caja
+  (capM2) ÷ m² de la bandera, salvo que se indique la capacidad exacta en Configuración → Cajas.
 
 ## Documentos
 - Cotización: texto de descripciones en tipo oración aunque se escriba en mayúsculas; sin

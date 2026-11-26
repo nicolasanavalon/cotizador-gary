@@ -773,7 +773,7 @@ function actualizarDespacho() {
     const opts = { tabla: CFG.capacidad, pesoM2: +CFG.pesoM2 || 0.2, servicio: ds.modo, destino, secundaria: !!ds.secundaria };
     if (!destino) { ds.calc = { error: 'Elige la región del cliente o el destino Correos.' }; ds.costo = 0; }
     else {
-      const r = ds.manual ? Envio.precioManual(ds.manual, CFG.cajas, opts) : Envio.empacar(piezasEnvio(D), CFG.cajas, opts);
+      const r = ds.manual ? Envio.precioManual(ds.manual, CFG.cajas, { ...opts, piezas: piezasEnvio(D) }) : Envio.empacar(piezasEnvio(D), CFG.cajas, opts);
       ds.calc = { ...r, destino, servicio: ds.modo };
       ds.costo = r.costo;
     }
@@ -793,10 +793,19 @@ function renderDespacho() {
   const c = ds.calc, el = $('#despCalc');
   if (!correos || !c) { el.innerHTML = ''; return; }
   if (c.error) { el.innerHTML = `<div class="warn-txt">${esc(c.error)}</div>`; return; }
-  const cajas = c.cajas.length ? c.cajas.map(x => `<span class="caja">${x.n} × ${esc(x.nombre)} <small>(${String(x.kg).replace('.', ',')} kg)</small> · <b>${clp(x.unitario)}</b> c/u</span>`).join('')
+  const kgTxt = v => String(v).replace('.', ',');
+  const cajas = c.cajas.length ? c.cajas.map(x => x.lleva ? `<div class="caja-det">
+      <div class="cd-top"><b>${esc(x.nombre)}</b> <small>${esc(x.medidas || '')} cm</small><b class="v">${clp(x.unitario)}</b></div>
+      <div>${x.lleva.length ? x.lleva.map(l => `${l.n} de ${esc(l.medida.replace(/ x /, '×'))} <small>(caben ${l.cap})</small>`).join(' + ') +
+        ` → <b>ocupa ${Math.round(x.lleva.reduce((s, l) => s + l.n / l.cap, 0) * 100)} %</b>` : '<small>vacía</small>'}</div>
+      <div><small>Cobra ${kgTxt(x.kg)} kg ${x.porVolumen ? `por volumen (peso real ${kgTxt(x.kgReal)} kg)` : `por peso real (volumen ${kgTxt(x.kgVol)} kg)`}</small></div></div>`
+      : `<span class="caja">${x.n} × ${esc(x.nombre)} <small>(${kgTxt(x.kg)} kg)</small> · <b>${clp(x.unitario)}</b> c/u</span>`).join('')
     : '<span class="hint">Sin banderas con medida para despachar.</span>';
+  const caps = CFG.cajas.map(b => `${esc(b.nombre.replace(/^Caja /, ''))} ${String(+b.capM2 || 0).replace('.', ',')} m²`).join(', ');
   const man = CFG.cajas.map(b => `<label>${esc(b.nombre)} <input type="number" min="0" data-caja="${b.id}" value="${ds.manual ? (+ds.manual[b.id] || 0) : (c.cajas.find(x => x.id === b.id)?.n || 0)}"></label>`).join('');
-  el.innerHTML = `<div class="cajas">${cajas}<span>→ total Correos <b>${clp(c.costo)}</b></span></div>
+  el.innerHTML = `<div class="cajas-lista">${cajas}<div class="caja-tot">Total Correos <b>${clp(c.costo)}</b></div></div>
+    <p class="hint como"><b>Caben</b> = m² de bandera que admite la caja (${caps}) ÷ m² de la bandera.
+      <b>Kg cobrado</b> = el mayor entre peso real (${String(+CFG.pesoM2 || 0.2).replace('.', ',')} kg/m² + caja) y volumen (largo × ancho × alto ÷ 4.000).</p>
     ${c.avisos.map(a => `<div class="warn-txt">${esc(a)}</div>`).join('')}
     <div class="manual">${ds.manual ? 'Cajas a mano:' : 'Ajustar cajas:'} ${man}
       ${ds.manual ? '<a href="#" class="mini" data-caja-auto>volver a cálculo automático</a>' : ''}</div>`;
