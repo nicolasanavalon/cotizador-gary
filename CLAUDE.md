@@ -52,7 +52,11 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   por celda; miniaturas e imágenes en la hoja Imagenes). Galería: **Sugeridas** (por nombre del
   producto y por **cliente**; palabras genéricas como "Municipalidad" no cuentan), **De uso frecuente**
   (2+ usos) y **De uso poco frecuente**. Aprende de cada uso (nombre, cliente, cantidad de usos).
-  Se importaron las fotos del panel de producción (taller-gary) con su producto, cliente, OT y usos. La cotización y la OT dicen que las imágenes son referenciales.
+  Se importaron las fotos del panel de producción (taller-gary) con su producto, cliente, OT y usos.
+  **Sin imágenes repetidas:** cada imagen tiene una firma visual (`firmaImagen`); si se sube una que ya
+  está, se usa la existente. Las repetidas se fusionan en una sola entrada (nombres, clientes y usos
+  sumados; ids antiguos en `a`). Imágenes casi iguales con otro nombre (ej. "Puerto Talca"/"Puerto
+  Tepual") no se fusionan. La cotización y la OT dicen que las imágenes son referenciales.
 
 ## Precios y margen
 - El margen es **sobre el precio de venta**: `precio = costo / (1 − margen)`, redondeado hacia arriba.

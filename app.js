@@ -429,9 +429,22 @@ async function subirImagen(it, file) {
   try { data = await comprimirImagen(file); }
   catch (e) { toast('No se pudo leer el archivo (' + e.message + '). Formatos: JPG, PNG, SVG o PDF.'); return; }
   const id = 'img' + uid(), thumb = await miniatura(data), thumbId = thumb ? 'th' + id : null;
+  const nombreArchivo = (file.name || '').replace(/\.[^.]+$/, '');
+  let sig = null;
+  if (thumb) {
+    try {
+      sig = await firmaImagen(thumb);
+      const rep = await buscarRepetida(sig, [it.titulo || tituloAuto(it) || nombreArchivo]);
+      if (rep) {   // misma imagen ya guardada: no se duplica
+        it.imagen = rep.i; registrarEnBiblioteca(rep.i, it);
+        await asegurarImagenes([it]); renderItems();
+        toast('Esa imagen ya estaba en la biblioteca: se usó la misma'); return;
+      }
+    } catch (_) {}
+  }
   guardarImgLocal(id, data); if (thumb) guardarImgLocal(thumbId, thumb);
   it.imagen = id; renderItems();
-  registrarEnBiblioteca(id, it, thumbId, (file.name || '').replace(/\.[^.]+$/, ''));
+  registrarEnBiblioteca(id, it, thumbId, nombreArchivo, sig?.h);
   if (nubeActiva()) {
     try {
       if (thumb) await api('guardarImagen', { id: thumbId, data: thumb });
@@ -462,7 +475,7 @@ function biblioteca() {
     CFG.biblioteca = arr; CFG._bibPartesLeidas = CFG.bibPartes;
   }
   // aprende también de las cotizaciones ya guardadas
-  const ya = new Set(CFG.biblioteca.map(e => e.i));
+  const ya = new Set(CFG.biblioteca.flatMap(e => [e.i, ...(e.a || [])]));
   for (const c of COTS) for (const x of (c.items || [])) if (x.imagen && !ya.has(x.imagen)) {
     ya.add(x.imagen);
     CFG.biblioteca.push({ i: x.imagen, t: null, n: [x.titulo || tituloAuto(normalizarItem({ ...x }))].filter(Boolean), c: [c.cliente?.nombre].filter(Boolean), u: 1, f: c.fecha || hoy() });
@@ -483,10 +496,11 @@ function subirBiblioteca() {
   CFG.bibPartes = partes.length; CFG._bibPartesLeidas = partes.length;
   saveCfg(); subirConfig(cfg).catch(() => {});
 }
-function registrarEnBiblioteca(id, it, thumbId, extra) {
-  const bib = biblioteca(); let e = bib.find(x => x.i === id);
+function registrarEnBiblioteca(id, it, thumbId, extra, hash) {
+  const bib = biblioteca(); let e = bib.find(x => x.i === id || (x.a || []).includes(id));
   if (!e) { e = { i: id, t: thumbId || null, n: [], c: [], u: 0, f: hoy() }; bib.push(e); }
   if (thumbId) e.t = thumbId;
+  if (hash) e.h = hash;
   const nombre = (it.titulo || tituloAuto(it) || extra || '').trim().slice(0, 60);
   if (nombre && !e.n.some(x => normTxt(x) === normTxt(nombre))) e.n = [nombre, ...e.n].slice(0, 4);
   const cli = (D.cliente?.nombre || '').trim().slice(0, 60);
@@ -494,6 +508,104 @@ function registrarEnBiblioteca(id, it, thumbId, extra) {
   if (cli && !e.c.some(x => normTxt(x) === normTxt(cli))) e.c = [cli, ...e.c].slice(0, 4);
   e.u = (+e.u || 0) + 1; e.f = hoy();
   subirBiblioteca();
+}
+/* ---------- Imágenes repetidas ----------
+   Firma visual de la miniatura (sin bordes): hash de diferencias 9×8, colores 8×8 y grises 48×48.
+   Dos imágenes son la misma si se ven casi iguales; si solo se parecen (ej. el mismo logo con otro
+   nombre, "Puerto Talca" / "Puerto Tepual"), además deben calzar los nombres del producto. */
+const FIRMAS = new Map();
+function firmaImagen(src) {
+  if (FIRMAS.has(src)) return FIRMAS.get(src);
+  const p = new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight, cv = document.createElement('canvas');
+      cv.width = w; cv.height = h; const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      const px = g.getImageData(0, 0, w, h).data, b = [px[0], px[1], px[2]];
+      let x0 = w, y0 = h, x1 = -1, y1 = -1;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (Math.abs(px[i] - b[0]) + Math.abs(px[i + 1] - b[1]) + Math.abs(px[i + 2] - b[2]) > 60) {
+          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+      if (x1 < 0 || (x1 - x0 + 1) * (y1 - y0 + 1) < w * h * 0.2) { x0 = 0; y0 = 0; x1 = w; y1 = h; } else { x1++; y1++; }
+      const grilla = (gc, gf) => {
+        const out = [];
+        for (let r = 0; r < gf; r++) for (let c = 0; c < gc; c++) {
+          const a = x0 + Math.floor((x1 - x0) * c / gc), bb = x0 + Math.floor((x1 - x0) * (c + 1) / gc);
+          const t = y0 + Math.floor((y1 - y0) * r / gf), u = y0 + Math.floor((y1 - y0) * (r + 1) / gf);
+          let s0 = 0, s1 = 0, s2 = 0, n = 0;
+          for (let y = t; y < Math.max(u, t + 1); y++) for (let x = a; x < Math.max(bb, a + 1); x++) {
+            const i = (y * w + x) * 4; s0 += px[i]; s1 += px[i + 1]; s2 += px[i + 2]; n++;
+          }
+          out.push([s0 / n, s1 / n, s2 / n]);
+        }
+        return out;
+      };
+      const gris = p => .299 * p[0] + .587 * p[1] + .114 * p[2];
+      const d = grilla(9, 8).map(gris); let bits = '';
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) bits += d[r * 9 + c] < d[r * 9 + c + 1] ? '1' : '0';
+      let hx = ''; for (let k = 0; k < 64; k += 4) hx += parseInt(bits.slice(k, k + 4), 2).toString(16);
+      res({ h: hx, col: grilla(8, 8).flat(), fino: grilla(48, 48).map(gris) });
+    };
+    img.onerror = () => rej(new Error('imagen ilegible'));
+    img.src = src;
+  });
+  FIRMAS.set(src, p); p.catch(() => FIRMAS.delete(src));
+  return p;
+}
+function distHash(a, b) {
+  let n = 0;
+  for (let k = 0; k < 16; k++) { let x = parseInt(a[k], 16) ^ parseInt(b[k], 16); while (x) { n += x & 1; x >>= 1; } }
+  return n;
+}
+const GENERICAS_PRODUCTO = new Set('gallardete gallardetes insignia estandarte escritorio doble raso bistrech oxford flecos cordon dorado driza mastil madera especial modelo'.split(' '));
+const clavesNombre = ns => new Set(ns.flatMap(palabras).filter(w => !GENERICAS.has(w) && !GENERICAS_PRODUCTO.has(w)));
+function mismaImagen(sa, sb, na, nb) {
+  const dh = distHash(sa.h, sb.h);
+  if (dh > 18) return false;
+  let dc = 0; for (let k = 0; k < sa.col.length; k++) dc += Math.abs(sa.col[k] - sb.col[k]);
+  if (dc / sa.col.length > 10.5) return false;
+  let dif = 0; for (let k = 0; k < sa.fino.length; k++) if (Math.abs(sa.fino[k] - sb.fino[k]) > 60) dif++;
+  if (dh <= 14 && dif / sa.fino.length * 100 <= 3) return true;
+  const ka = [...clavesNombre(na)], kb = [...clavesNombre(nb)];
+  return ka.some(x => kb.some(y => x.startsWith(y) || y.startsWith(x)));
+}
+const srcEntrada = e => imgDe(e.t) || imgDe(e.i);
+/* Busca en la biblioteca una imagen igual a la firma dada. */
+async function buscarRepetida(sig, nombres, excluir) {
+  const cand = biblioteca().filter(e => e !== excluir && e.h && distHash(e.h, sig.h) <= 18);
+  if (!cand.length) return null;
+  await asegurarImagenes(cand.map(e => ({ imagen: e.t || e.i })));
+  for (const e of cand) {
+    const src = srcEntrada(e); if (!src) continue;
+    try { if (mismaImagen(sig, await firmaImagen(src), nombres, e.n || [])) return e; } catch (_) {}
+  }
+  return null;
+}
+function fusionarEntradas(a, b) {   // b se junta en a
+  const unir = (x, y, max) => { const out = [...(x || [])]; for (const v of y || []) if (!out.some(o => normTxt(o) === normTxt(v))) out.push(v); return out.slice(0, max); };
+  a.n = unir(a.n, b.n, 8); a.c = unir(a.c, b.c, 10);
+  a.u = (+a.u || 0) + (+b.u || 0); if (String(b.f || '') > String(a.f || '')) a.f = b.f;
+  if (!a.o && b.o) a.o = b.o;
+  a.a = [...new Set([...(a.a || []), b.i, ...(b.a || [])])].filter(x => x !== a.i);
+}
+/* Calcula la firma de las imágenes que no la tienen y junta las repetidas. Devuelve true si cambió algo. */
+async function depurarBiblioteca() {
+  const bib = biblioteca(); let cambio = false;
+  for (const e of bib.filter(x => !x.h && srcEntrada(x))) {
+    try {
+      const sig = await firmaImagen(srcEntrada(e)); e.h = sig.h; cambio = true;
+      const otra = await buscarRepetida(sig, e.n || [], e);
+      if (otra && bib.includes(otra)) {
+        const [queda, sale] = (+otra.u || 0) >= (+e.u || 0) ? [otra, e] : [e, otra];
+        fusionarEntradas(queda, sale); bib.splice(bib.indexOf(sale), 1);
+      }
+    } catch (_) {}
+  }
+  if (cambio) subirBiblioteca();
+  return cambio;
 }
 /* Palabras que no distinguen a un cliente (si no, "Municipalidad" sugeriría todas las municipalidades). */
 const GENERICAS = new Set(('municipalidad ilustre corporacion municipal servicio region regional comuna chile sociedad limitada ltda empresa ' +
@@ -517,6 +629,7 @@ async function cargarMiniaturas() {
     await asegurarImagenes(faltan.slice(i, i + 30).map(e => ({ imagen: e.t || e.i })));
     if ($('#dlgGaleria').open) renderGaleria();
   }
+  if ($('#dlgGaleria').open && await depurarBiblioteca()) renderGaleria();
 }
 function puntaje(e, pq, pc) {
   let s = 0;
