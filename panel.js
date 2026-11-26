@@ -615,3 +615,26 @@ async function iniciarProduccion() {
   if (!PROD || minutosDesde(PROD.hora) > 10) refrescarProduccionFondo();
 }
 setTimeout(() => { iniciarProduccion().catch(() => {}); }, 1500);
+
+/* ---------- Versión nueva publicada: se actualiza sola ----------
+   El navegador guarda la página hasta 10 minutos. version.txt se consulta sin caché: si cambió,
+   al abrir se recarga de inmediato y, si ya se está trabajando, aparece un aviso para actualizar. */
+(() => {
+  const inicio = Date.now();
+  async function revisarVersion() {
+    if (!window.__VERSION__) return;
+    try {
+      const v = (await (await fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })).text()).trim();
+      if (!v || v === window.__VERSION__) return;
+      if (Date.now() - inicio < 8000) { location.reload(); return; }
+      if (document.getElementById('avisoVersion')) return;
+      const a = document.createElement('div'); a.id = 'avisoVersion';
+      a.innerHTML = 'Hay una versión nueva del sistema. <button type="button">Actualizar</button>';
+      a.querySelector('button').onclick = () => { try { saveDraft(); } catch (_) {} location.reload(); };
+      document.body.appendChild(a);
+    } catch (_) { /* sin conexión: se revisa después */ }
+  }
+  revisarVersion();
+  setInterval(revisarVersion, 5 * 60 * 1000);
+  window.addEventListener('focus', revisarVersion);
+})();

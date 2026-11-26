@@ -838,3 +838,5 @@ a.brand:hover{background:#f3f1ec}
 .chip.per-otro{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
 .chip.per-otro.active select{color:inherit}
 .chip.per-otro select{color:var(--ink)}
+#avisoVersion{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#1d2330;color:#fff;padding:10px 12px 10px 18px;border-radius:12px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.25);display:flex;gap:12px;align-items:center}
+#avisoVersion button{background:#b08930;color:#fff;border:0;border-radius:8px;padding:6px 12px;font:inherit;font-weight:700;cursor:pointer}
