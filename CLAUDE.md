@@ -99,9 +99,11 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - Validez y plazo de entrega en días hábiles (se descuentan feriados).
 
 ## Flujo, facturación y panel (panel.js)
-- Estados de la cotización: **Borrador** (al guardar) → **Enviada** (botón "Marcar enviada", fecha de envío) →
-  **Aprobada** (pide N° OC del cliente y fecha; crea la OT) o **Rechazada** (pide motivo). **Vencida** se calcula:
-  enviada y pasó la validez en días hábiles. Las antiguas "Pendiente" se muestran como Enviada.
+- Estados de la cotización: **Borrador** (al guardar) → **Enviada** (botón "Enviada", fecha de envío) →
+  **Aprobada** (pide N° OC del cliente y fecha; crea la OT) o **Rechazada** (solo confirma). **Sin estado "Vencida"
+  y sin motivos de rechazo** (el dueño no los quiere: los clientes en general no responden). Las antiguas
+  "Pendiente" se muestran como Enviada. Tasa de aprobación = aprobadas ÷ enviadas al cliente.
+- Tabla de OT: OT, ID, fecha, entrega, cliente, productos, **neto y margen $** (de la cotización), estado.
 - OT: Pendiente → En producción → Terminada → Despachada → Entregada (se guardan las fechas). Atrasada = pasó la
   fecha de entrega y no está terminada.
 - **Facturación**: ventas aprobadas → "Emitir factura" (N° a mano, fecha, días de crédito según condición de pago,
@@ -114,6 +116,7 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   Gráficos: cotizado/aprobado por mes, estado de las cotizaciones + motivos de rechazo, mejores clientes, **ventas por
   tipo de producto** (según el tipo elegido en las listas, no el nombre escrito), requiere atención, ventas por región.
   **Todo se puede pinchar**: lleva a Cotizaciones (o Facturación/OT) con el filtro aplicado ("Filtro del panel ✕").
+  Ese filtro es solo de esa vista: **al entrar por el menú la lista parte sin filtros**.
 - **Producción** (solo lectura): lee el panel de producción del taller (taller-gary, misma URL que usa la revisión
   diaria de imágenes) y muestra las OT en curso, atrasadas, próximas 7 días y entregadas, con foto, etapa y compromiso.
   No escribe nada; los cambios se hacen en el panel de producción.

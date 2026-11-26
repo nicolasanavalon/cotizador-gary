@@ -2,7 +2,7 @@
    módulo de Facturación y Panel de indicadores (KPI).
    Usa las funciones y datos globales de app.js (COTS, OTS, api, clp, pct, fechaCL…). */
 
-const ESTADOS_COT = ['Borrador', 'Enviada', 'Aprobada', 'Rechazada', 'Vencida'];
+const ESTADOS_COT = ['Borrador', 'Enviada', 'Aprobada', 'Rechazada'];
 /* Campos que se registran desde las listas y que el editor no debe pisar al guardar. */
 const CAMPOS_CICLO = ['fechaEnvio', 'fechaAprob', 'oc', 'fechaRechazo', 'motivoRechazo', 'factura', 'demo'];
 const MOTIVOS_RECHAZO = ['Precio', 'Plazo de entrega', 'Compró a otro proveedor', 'Sin respuesta del cliente', 'Proyecto cancelado', 'Otro'];
@@ -14,7 +14,6 @@ const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'jul
 function estadoCot(c) {
   let e = c.estado || 'Borrador';
   if (e === 'Pendiente') e = 'Enviada';                       // cotizaciones antiguas
-  if (e === 'Enviada' && esNumero(c.validez) && +c.validez > 0 && sumarDiasHabiles(c.fechaEnvio || c.fecha, +c.validez) < hoy()) e = 'Vencida';
   return e;
 }
 const venceCot = c => esNumero(c.validez) && +c.validez > 0 ? sumarDiasHabiles(c.fechaEnvio || c.fecha, +c.validez) : '';
@@ -91,11 +90,8 @@ async function pasoCot(a, id) {
       return;
     }
     if (a === 'rechazar') {
-      const d = await pedirDatos(`Rechazar cotización N° ${numDoc(c)}`, c.cliente.nombre, [
-        { k: 'motivo', label: 'Motivo', type: 'select', opciones: MOTIVOS_RECHAZO, value: 'Precio' },
-        { k: 'detalle', label: 'Detalle (opcional)', placeholder: 'Ej: compró a $9.900 la unidad' }], 'Rechazar');
-      if (!d) return;
-      c.estado = 'Rechazada'; c.fechaRechazo = hoy(); c.motivoRechazo = d.motivo + (d.detalle ? ': ' + d.detalle : '');
+      if (!confirm(`¿Marcar la cotización ${numDoc(c)} (${c.cliente.nombre}) como rechazada?`)) return;
+      c.estado = 'Rechazada'; c.fechaRechazo = hoy();
       await guardarCotLista(c); toast(`Cotización ${numDoc(c)} rechazada`);
     }
   } catch (err) { Object.assign(c, JSON.parse(antes)); toast('No se pudo guardar: ' + err.message); }
@@ -195,20 +191,20 @@ function datosPanel() {
   const desde = desdePeriodo(PERIODO);
   const cots = COTS.filter(c => !desde || String(c.fecha) >= desde).map(c => ({ c, e: estadoCot(c), t: c.totales || {} }));
   const de = e => cots.filter(x => x.e === e);
-  const aprob = de('Aprobada'), rech = de('Rechazada'), venc = de('Vencida'), env = de('Enviada');
+  const aprob = de('Aprobada'), rech = de('Rechazada'), env = de('Enviada');
   const suma = (arr, k = 'neto') => arr.reduce((s, x) => s + (+x.t[k] || 0), 0);
-  return { desde, cots, aprob, rech, venc, env, suma };
+  return { desde, cots, aprob, rech, env, suma };
 }
 function renderPanel() {
   $('#panelPeriodo').innerHTML = PERIODOS.map(([k, l]) => `<button type="button" class="chip ${PERIODO === k ? 'active' : ''}" data-per="${k}">${l}</button>`).join('');
-  const { desde, cots, aprob, rech, venc, suma } = datosPanel();
+  const { desde, cots, aprob, rech, env: envP, suma } = datosPanel();
   if (!COTS.length) { $('#panelCuerpo').innerHTML = '<div class="card empty">Todavía no hay cotizaciones. Los indicadores aparecen a medida que se cotiza.</div>'; return; }
   const etqPer = (PERIODOS.find(p => p[0] === PERIODO) || [])[1] || '';
   const conDesde = extra => desde ? { ...extra, desde, etiqueta: [extra.etiqueta, etqPer.toLowerCase()].filter(Boolean).join(' · ') } : extra;
   const acc = o => `data-accion="${esc(JSON.stringify(o))}" tabindex="0"`;
-  const decididas = aprob.length + rech.length + venc.length;
+  const enviadasP = [...aprob, ...rech, ...envP], decididas = enviadasP.length;   // tasa sobre lo enviado al cliente
   const tasa = decididas ? aprob.length / decididas : null;
-  const tasaMonto = suma(aprob) + suma(rech) + suma(venc) ? suma(aprob) / (suma(aprob) + suma(rech) + suma(venc)) : null;
+  const tasaMonto = suma(enviadasP) ? suma(aprob) / suma(enviadasP) : null;
   const venta = suma(aprob), margen = suma(aprob, 'margen');
   const todas = COTS.filter(c => estadoCot(c) === 'Aprobada').map(c => ({ c, f: estadoFactura(c) }));
   const totF = arr => arr.reduce((s, x) => s + (x.c.factura?.total ?? x.c.totales?.bruto ?? 0), 0);
@@ -219,7 +215,7 @@ function renderPanel() {
   const kpis = [
     `<div class="kpi clic" ${verCot('', 'todas')}><small>Cotizado (neto)</small><b>${corto(suma(cots))}</b><span>${cots.length} cotizacion${cots.length === 1 ? '' : 'es'}</span></div>`,
     `<div class="kpi ok clic" ${verCot('Aprobada')}><small>Vendido (neto)</small><b>${corto(venta)}</b><span>${aprob.length} aprobada${aprob.length === 1 ? '' : 's'}</span></div>`,
-    kpi('Tasa de aprobación', tasa == null ? '—' : pct(tasa), tasaMonto == null ? 'sin cotizaciones resueltas' : `${pct(tasaMonto)} del monto · ${aprob.length} de ${decididas}`),
+    kpi('Tasa de aprobación', tasa == null ? '—' : pct(tasa), tasaMonto == null ? 'sin cotizaciones enviadas' : `${aprob.length} de ${decididas} enviadas · ${pct(tasaMonto)} del monto`),
     kpi('Margen de lo vendido', venta ? pct(margen / venta) : '—', venta ? `${corto(margen)} de margen` : ''),
     kpi('Venta promedio', aprob.length ? corto(venta / aprob.length) : '—', 'por cotización aprobada'),
     `<div class="kpi clic ${vencido.length ? 'bad' : ''}" ${acc({ ir: 'fact', filtro: 'cobrar' })}><small>Por cobrar</small><b>${corto(totF(porCobrar))}</b>
@@ -242,8 +238,6 @@ function renderPanel() {
 
   // estado de las cotizaciones del período
   const porEstado = ESTADOS_COT.map(e => { const arr = cots.filter(x => x.e === e); return { e, n: arr.length, v: suma(arr) }; }).filter(x => x.n);
-  const motivos = {};
-  for (const x of rech) { const k = String(x.c.motivoRechazo || 'Sin motivo').split(':')[0]; motivos[k] = (motivos[k] || 0) + 1; }
   // clientes, tipos de producto y regiones (lo vendido en el período)
   const topCli = agrupar(aprob, x => x.c.cliente.nombre || '—').slice(0, 7);
   const porTipo = {};
@@ -257,11 +251,8 @@ function renderPanel() {
   // requiere atención
   const alertas = [];
   const env = cots.filter(x => x.e === 'Enviada');
-  const porVencer = env.filter(x => { const v = venceCot(x.c); return v && v <= sumarDiasHabiles(hoy(), 3); });
   for (const o of OTS.filter(otAtrasada)) alertas.push(['bad', `OT ${o.numero} atrasada`, `${o.cliente?.nombre || ''} · entrega ${fechaCL(otEntrega(o))} · ${o.estado}`, { ir: 'ots' }]);
   for (const x of vencido) alertas.push(['bad', `Factura N° ${x.c.factura.numero} vencida`, `${x.c.cliente.nombre} · ${clp(x.c.factura.total)} · venció ${fechaCL(x.c.factura.vence)}`, { ir: 'fact', filtro: 'vencida' }]);
-  for (const x of porVencer) alertas.push(['warn', `Cotización ${numDoc(x.c)} vence ${fechaCL(venceCot(x.c))}`, `${x.c.cliente.nombre} · ${clp(x.t.neto)} neto · hacer seguimiento`, { ir: 'cot', estado: 'Enviada' }]);
-  for (const x of COTS.filter(c => estadoCot(c) === 'Vencida').slice(0, 5)) alertas.push(['warn', `Cotización ${numDoc(x)} venció sin respuesta`, `${x.cliente.nombre} · ${clp(x.totales?.neto)} neto · llamar o marcar rechazada`, { ir: 'cot', estado: 'Vencida' }]);
   for (const x of porFacturar.filter(x => ['Despachada', 'Entregada', 'Terminada'].includes(otDe(x.c)?.estado))) alertas.push(['info', `Cotización ${numDoc(x.c)} lista para facturar`, `${x.c.cliente.nombre} · OT ${otDe(x.c).estado.toLowerCase()} · ${clp(x.c.totales?.bruto)}`, { ir: 'fact', filtro: 'porFacturar' }]);
   for (const o of OTS.filter(o => !['Terminada', 'Despachada', 'Entregada'].includes(o.estado) && otEntrega(o) >= hoy() && otEntrega(o) <= sumarDias(hoy(), 7)))
     alertas.push(['info', `OT ${o.numero} se entrega ${fechaCL(otEntrega(o))}`, `${o.cliente?.nombre || ''} · ${o.estado}`, { ir: 'ots' }]);
@@ -278,9 +269,7 @@ function renderPanel() {
       <div class="card viz"><h3>Estado de las cotizaciones</h3><p class="hint">Del período · cantidad y monto neto</p>
         <div class="hbars">${barras(porEstado.map(x => ({ l: x.e, v: x.v, txt: `<b>${x.n}</b> <small>${corto(x.v)}</small>`, tip: tip(x.e, `${x.n} cotizaciones · ${clp(x.v)} neto`, 'Clic para verlas'),
           accion: { ir: 'cot', estado: x.e, extra: desde ? { tipo: 'desde', valor: desde, etiqueta: etqPer.toLowerCase() } : null } })))}</div>
-        <h3 style="margin-top:16px">Motivos de rechazo</h3>
-        ${Object.keys(motivos).length ? `<div class="hbars">${barras(Object.entries(motivos).sort((a, b) => b[1] - a[1]).map(([l, v]) => ({ l, v, txt: String(v), tip: tip(l, `${v} cotización(es)`, 'Clic para verlas'),
-          accion: { ir: 'cot', estado: 'Rechazada', extra: conDesde({ tipo: 'motivo', valor: l, etiqueta: 'motivo: ' + l }) } })))}</div>` : '<p class="empty">Sin rechazos en el período.</p>'}</div>
+</div>
       <div class="card viz"><h3>Mejores clientes</h3><p class="hint">Venta neta aprobada en el período · clic para ver sus cotizaciones</p>
         <div class="hbars">${topCli.length ? barras(topCli.map(([l, x]) => ({ l, v: x.v, txt: corto(x.v), tip: tip(l, `${clp(x.v)} neto · ${x.n} venta${x.n === 1 ? '' : 's'}`),
           accion: { ir: 'cot', estado: '', extra: { tipo: 'cliente', valor: l, etiqueta: l } } }))) : vacio}</div></div>
@@ -309,7 +298,6 @@ function coincideExtra(c, x) {
   if (x.tipo === 'cliente') return (c.cliente.nombre || '—') === x.valor;
   if (x.tipo === 'region') return (c.cliente.region || 'Sin región') === x.valor;
   if (x.tipo === 'producto') return (c.items || []).some(it => tipoProducto({ ...it }) === x.valor);
-  if (x.tipo === 'motivo') return String(c.motivoRechazo || 'Sin motivo').split(':')[0] === x.valor;
   return true;
 }
 function ejecutarAccion(o) {

@@ -859,7 +859,12 @@ function mostrar(view) {
   window.scrollTo(0, 0);
   if (view !== 'cotizar') actualizar();
 }
-$$('.topbar [data-view]').forEach(b => b.onclick = () => mostrar(b.dataset.view));
+$$('.topbar [data-view]').forEach(b => b.onclick = () => {
+  // los filtros que pone el panel son solo para esa vista: al entrar por el menú la lista parte limpia
+  if (b.dataset.view === 'cotizaciones') { FILTRO_COT = ''; FILTRO_EXTRA = null; }
+  if (b.dataset.view === 'facturas' && typeof FILTRO_FACT !== 'undefined') FILTRO_FACT = '';
+  mostrar(b.dataset.view);
+});
 
 /* ---------------- Editor de cotización ---------------- */
 function chipsHtml(valor, attr) {
@@ -2108,9 +2113,8 @@ function renderCotizaciones() {
   $('#tablaCot').innerHTML = `<thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>ID MP</th><th class="num">Neto</th><th class="num">Margen $</th><th class="num">Margen %</th><th>Estado</th><th></th></tr></thead><tbody>` +
     rows.map(({ c, e }) => { const t = c.totales || {}; const ot = OTS.find(o => o.cotId === c.id); const fe = estadoFactura(c);
       const paso = e === 'Borrador' ? '<button class="btn sm" data-a="enviada">✉ Enviada</button>'
-        : e === 'Enviada' || e === 'Vencida' ? '<button class="btn sm ok" data-a="aprobar">Aprobar</button> <button class="btn sm ghost" data-a="rechazar">Rechazar</button>' : '';
+        : e === 'Enviada' ? '<button class="btn sm ok" data-a="aprobar">Aprobar</button> <button class="btn sm ghost" data-a="rechazar">Rechazar</button>' : '';
       const sub = e === 'Aprobada' ? `${ot ? `<small class="muted">OT ${esc(ot.numero)} · ${esc(ot.estado)}</small><br>` : ''}<a href="#" class="paso-fact ${fe.clase}" data-a="facturacion">${esc(fe.texto)}</a>`
-        : e === 'Rechazada' ? `<small class="muted">${esc(c.motivoRechazo || '')}</small>`
         : e === 'Enviada' && c.fechaEnvio ? `<small class="muted">enviada ${fechaCL(c.fechaEnvio)}</small>` : '';
       return `<tr data-id="${c.id}"><td><b>${esc(numDoc(c))}</b>${c.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${fechaCL(c.fecha)}</td><td>${esc(c.cliente.nombre)}</td>
       <td><small>${esc(c.idExterno || '—')}</small></td>
@@ -2197,8 +2201,8 @@ function otDesdeCot(c, fecha) {
 const ESTADOS_OT = ['Pendiente', 'En producción', 'Terminada', 'Despachada', 'Entregada'];
 function renderOts() {
   if (!OTS.length) { $('#tablaOt').innerHTML = '<tr><td class="empty">Aún no hay OTs. Se crean solas al aprobar una cotización.</td></tr>'; return; }
-  $('#tablaOt').innerHTML = `<thead><tr><th>OT</th><th>ID</th><th>Fecha</th><th>Entrega</th><th>Cliente</th><th>Productos</th><th>Estado</th><th></th></tr></thead><tbody>` +
-    OTS.map(o => `<tr data-id="${o.id}" class="${otAtrasada(o) ? 'atrasada' : ''}"><td><b>${esc(o.numero)}</b>${o.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${esc(o.cotDoc || o.cotNumero || '')}</td><td>${fechaCL(o.fecha)}</td><td><b>${otEntrega(o) ? fechaCL(otEntrega(o)) : '—'}</b>${otAtrasada(o) ? '<br><small class="atraso">atrasada</small>' : ''}</td><td>${esc(o.cliente.nombre)}</td><td>${o.items.reduce((s, i) => s + (+i.cantidad || 0), 0)} u.</td>
+  $('#tablaOt').innerHTML = `<thead><tr><th>OT</th><th>ID</th><th>Fecha</th><th>Entrega</th><th>Cliente</th><th>Productos</th><th class="num">Neto</th><th class="num">Margen $</th><th>Estado</th><th></th></tr></thead><tbody>` +
+    OTS.map(o => `<tr data-id="${o.id}" class="${otAtrasada(o) ? 'atrasada' : ''}"><td><b>${esc(o.numero)}</b>${o.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${esc(o.cotDoc || o.cotNumero || '')}</td><td>${fechaCL(o.fecha)}</td><td><b>${otEntrega(o) ? fechaCL(otEntrega(o)) : '—'}</b>${otAtrasada(o) ? '<br><small class="atraso">atrasada</small>' : ''}</td><td>${esc(o.cliente.nombre)}</td><td>${o.items.reduce((s, i) => s + (+i.cantidad || 0), 0)} u.</td>${(t => `<td class="num">${t ? clp(t.neto) : '—'}</td><td class="num">${t ? clp(t.margen) : '—'}</td>`)(COTS.find(c => c.id === o.cotId)?.totales)}
       <td><select data-a="estado">${ESTADOS_OT.map(s => opt(s, o.estado)).join('')}</select></td>
       <td class="acc"><button class="btn sm" data-a="abrir">Abrir</button> <button class="btn sm" data-a="pdf">Imprimir / PDF</button>
         <button class="btn sm ghost danger" data-a="borrar">Borrar</button></td></tr>`).join('') + '</tbody>';
