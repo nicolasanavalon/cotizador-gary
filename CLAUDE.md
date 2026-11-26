@@ -44,8 +44,10 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   extra tela × 2 × precio; Subtotal A; flete 20 % + costo financiero 7 % + imprevisto 7 % = Subtotal B;
   costo = A + B. La columna Cantidad acepta **fórmulas tipo Excel** (`=(1,5*1)/1,4*1,2`, `=tela/12`,
   `=extra*2`): al pinchar se ve la fórmula, al salir el resultado. El cuadro llega solo hasta el
-  Total A + B (el margen se elige en la tarjeta del producto). **"Margen" del Excel = recargo sobre el costo** (precio = costo × (1 + %)); se muestra
-  además el margen real sobre venta. Sin costo hasta que se costea.
+  Total A + B (el margen se elige en la tarjeta del producto). El margen es **sobre la venta**, igual que
+  en Matriz (decisión del dueño: no se usa recargo sobre costo; 7.895 con 50 % → 15.790). Sin costo hasta que se costea.
+- **Por defecto los productos nuevos usan el método Tradicional** (es el que usa el papá).
+- La tarjeta del producto muestra costo unit., precio unit. neto, **margen unit.**, total neto, costo total y margen.
 
 ## Imágenes
 - Biblioteca en la nube (Config `bibPartes`/`bib0..n`, en trozos por el límite de 50.000 caracteres

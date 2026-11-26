@@ -704,7 +704,7 @@ function nuevoBorrador() {
 }
 function nuevoItem(libre = false) {
   return { id: uid(), producto: 'Bandera', productoOtro: '', tipo: '', material: '', materialOtro: '', medida: '', medidaOtra: '',
-    vaina: '', descripcion: '', titulo: '', costoManual: false, cantidad: 1, costo: 0, margen: +CFG.margenDef || 40, obs: '' };
+    vaina: '', descripcion: '', titulo: '', metodo: 'tradicional', costoManual: false, cantidad: 1, costo: 0, margen: +CFG.margenDef || 40, obs: '' };
 }
 
 /* ---------------- Cálculos ---------------- */
@@ -714,16 +714,10 @@ function precioUnitario(costo, margenPct) {
   const r = Math.max(1, +CFG.redondeo || 1);
   return Math.ceil(costo / (1 - m) / r) * r;   // margen sobre precio de venta
 }
-/* Método Tradicional (como el Excel del taller): "margen" = recargo sobre el costo → precio = costo × (1 + %) */
-function precioRecargo(costo, recargoPct) {
-  if (costo <= 0) return 0;
-  const r = Math.max(1, +CFG.redondeo || 1);
-  return Math.ceil(costo * (1 + recargoPct / 100) / r) * r;
-}
 const esTrad = it => it.metodo === 'tradicional';
 function calcItem(it) {
   const costoU = +it.costo || 0, cant = +it.cantidad || 0;
-  const precioU = esTrad(it) ? precioRecargo(costoU, +it.recargo || 0) : precioUnitario(costoU, +it.margen || 0);
+  const precioU = precioUnitario(costoU, +it.margen || 0);   // margen sobre la venta en ambos métodos
   const venta = precioU * cant, costo = costoU * cant, margen = venta - costo;
   return { costoU, cant, precioU, venta, costo, margen, margenPct: venta ? margen / venta : 0 };
 }
@@ -848,12 +842,6 @@ function mostrar(view) {
 $$('#tabs button').forEach(b => b.onclick = () => mostrar(b.dataset.view));
 
 /* ---------------- Editor de cotización ---------------- */
-const RECARGOS_RAPIDOS = [30, 40, 50, 60];
-function chipsRecargo(valor) {
-  const v = +valor, rapido = RECARGOS_RAPIDOS.includes(v);
-  return RECARGOS_RAPIDOS.map(m => `<button type="button" class="chip ${v === m ? 'active' : ''}" data-rg="${m}">${m}%</button>`).join('') +
-    `<span class="chip-input ${rapido ? '' : 'active'}">otro <input type="number" min="0" step="0.5" data-rg-manual value="${rapido ? '' : esc(valor)}" placeholder="—">%</span>`;
-}
 function chipsHtml(valor, attr) {
   const esRapido = MARGENES_RAPIDOS.includes(+valor);
   return MARGENES_RAPIDOS.map(m =>
@@ -1022,10 +1010,7 @@ function renderItems() {
             ? `<button type="button" class="costo-btn trad" data-act="trad" title="Costeo tradicional (como el Excel)">${+it.costo ? `<b>${clp(it.costo)}</b><span>costeo ▸</span>` : '<b class="vacio">Costear</b><span>abrir ▸</span>'}</button>
                <small class="nota">${+it.costo ? 'costeo tradicional (Excel)' : 'pincha para calcular como en el Excel'}</small>`
             : `<button type="button" class="costo-btn" data-act="desglose" title="Ver y editar el desglose"><b>${clp(it.costo)}</b><span>desglose ▸</span></button><small class="nota">${notaCosto}</small>`}</label>
-        ${esTrad(it)
-          ? `<div class="item-margen"><span class="lbl">Recargo s/costo</span><span class="chips">${chipsRecargo(it.recargo)}</span>
-               <small class="nota">${+it.costo ? 'margen real sobre venta ' + pct(calcItem(it).margenPct) : 'como el “margen” del Excel'}</small></div>`
-          : `<div class="item-margen"><span class="lbl">Margen</span><span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>`}
+        <div class="item-margen"><span class="lbl">Margen</span><span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>
       </div>
       <div class="item-res" data-res></div>
       <div class="item-desc">
@@ -1045,6 +1030,7 @@ function recalc() {
     el.innerHTML = `
       <div class="stat"><small>Costo unit.</small><b>${clp(c.costoU)}</b></div>
       <div class="stat"><small>Precio unit. neto</small><b>${clp(c.precioU)}</b></div>
+      <div class="stat ${c.precioU - c.costoU < 0 ? 'bad' : 'hl'}"><small>Margen unit.</small><b>${clp(c.precioU - c.costoU)}</b></div>
       <div class="stat"><small>Total neto</small><b>${clp(c.venta)}</b></div>
       <div class="stat"><small>Costo total</small><b>${clp(c.costo)}</b></div>
       <div class="stat ${c.margen < 0 ? 'bad' : 'hl'}"><small>Margen</small><b>${clp(c.margen)} · ${pct(c.margenPct)}</b></div>`;
@@ -1299,7 +1285,7 @@ $('#trGuardarDef').onclick = () => {
 };
 $('#trAplicar').onclick = () => {
   const it = TR.it, c = calcTrad(TR.t);
-  it.trad = TR.t; it.costo = Math.round(c.total); it.recargo = it.recargo || tradDef().recargo; it.costoManual = false; it.desglose = null;
+  it.trad = TR.t; it.costo = Math.round(c.total); it.costoManual = false; it.desglose = null;
   $('#dlgTrad').close(); renderItems();
 };
 
@@ -1342,7 +1328,6 @@ $('#items').addEventListener('input', e => {
   else if (f === 'materialOtro') { it.materialOtro = e.target.value; saveDraft(); }
   else if (f === 'medidaOtra') { it.medidaOtra = e.target.value; saveDraft(); }
   else if (f === 'descripcion' || f === 'obs' || f === 'titulo') { it[f] = e.target.value; saveDraft(); }
-  else if (e.target.hasAttribute('data-rg-manual')) { it.recargo = num(e.target.value); recalc(); }
   else if (e.target.hasAttribute('data-m-manual')) {
     it.margen = num(e.target.value);
     const box = e.target.closest('.item-margen');
@@ -1354,11 +1339,10 @@ $('#items').addEventListener('input', e => {
 $('#items').addEventListener('click', e => {
   const it = itemDe(e.target); if (!it) return;
   if (e.target.dataset.m) { it.margen = +e.target.dataset.m; renderItems(); renderChipsGlobal(); }
-  if (e.target.dataset.rg) { it.recargo = +e.target.dataset.rg; renderItems(); }
   const met = e.target.closest('[data-metodo]')?.dataset.metodo;
   if (met && met !== (it.metodo || 'matriz')) {
     it.metodo = met;
-    if (met === 'tradicional') { it.costo = it.trad ? Math.round(calcTrad(it.trad).total) : 0; it.recargo = it.recargo || tradDef().recargo; }
+    if (met === 'tradicional') { it.costo = it.trad ? Math.round(calcTrad(it.trad).total) : 0; }
     else { const cm = costoMatriz(it); it.costo = cm ?? 0; it.costoManual = false; it.desglose = null; }
     renderItems(); return;
   }
