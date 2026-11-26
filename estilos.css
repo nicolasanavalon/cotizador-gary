@@ -796,3 +796,26 @@ body[data-vista="cotizaciones"] main,body[data-vista="ots"] main,body[data-vista
 .po-etapa{font-size:12px;font-weight:700;background:#f3f1ec;border-radius:999px;padding:3px 10px;white-space:nowrap}
 .po-item.ok{opacity:.6}.po-item.ok .po-etapa{background:var(--ok-soft);color:var(--ok)}
 @media(max-width:560px){.prod-ots{grid-template-columns:1fr}}
+
+/* producción tipo planilla (solo lectura) */
+.seg{display:inline-flex;background:#efece5;border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:none;font:inherit;font-size:13px;font-weight:700;color:#8a6d1f;padding:6px 14px;border-radius:8px;cursor:pointer}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.1)}
+#filtrosProd{align-items:center;gap:10px}
+.prod-tabla{font-size:13px}
+.prod-tabla td{vertical-align:middle}
+.prod-tabla tr.corte td{border-top:3px solid #b08930}
+.prod-tabla tr.entregada td{opacity:.6}
+.prod-tabla .ot{font-weight:700;white-space:nowrap}
+.prod-tabla .cli{min-width:150px}
+.prod-tabla .nw{white-space:nowrap}
+.prod-tabla .dif{font-weight:700}.prod-tabla .dif.neg{color:var(--bad)}
+.prod-tabla .foto img{width:50px;height:36px;object-fit:cover;border-radius:5px;display:block}
+.prod-tabla .prodn{min-width:170px;font-weight:600}
+.prod-tabla .obs{min-width:160px;color:var(--muted);font-size:12.5px}
+.prod-tabla .status{min-width:120px;font-weight:600}
+.prod-tabla .c{text-align:center}
+.ck{display:inline-flex;width:20px;height:20px;border:1px solid #cfcac0;border-radius:5px;align-items:center;justify-content:center;font-size:12px;color:var(--ink)}
+.ck.on{background:#f3f1ec}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid #d9d4c9;border-top-color:#b08930;border-radius:50%;animation:gira .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes gira{to{transform:rotate(360deg)}}

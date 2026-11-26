@@ -117,9 +117,11 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   tipo de producto** (según el tipo elegido en las listas, no el nombre escrito), requiere atención, ventas por región.
   **Todo se puede pinchar**: lleva a Cotizaciones (o Facturación/OT) con el filtro aplicado ("Filtro del panel ✕").
   Ese filtro es solo de esa vista: **al entrar por el menú la lista parte sin filtros**.
-- **Producción** (solo lectura): lee el panel de producción del taller (taller-gary, misma URL que usa la revisión
-  diaria de imágenes) y muestra las OT en curso, atrasadas, próximas 7 días y entregadas, con foto, etapa y compromiso.
-  No escribe nada; los cambios se hacen en el panel de producción.
+- **Producción** (solo lectura): lee el panel de producción del taller (https://nicolasanavalon.github.io/taller-gary/,
+  su PROD_SYNC_URL, la misma que usa la revisión diaria de imágenes) y lo muestra **igual que su tabla**: ID, Cliente,
+  Comuna, F. comp., Dif (días, rojo si está atrasada), Foto, Producto, Medida, Tela, Cant, Subli, Apli, Obs, Status;
+  línea dorada entre OT; filtros Subli / Apli / 🇨🇱 y Vigentes / Entregadas / Todo; buscador. Arriba: OT vigentes,
+  atrasadas, se entregan en 7 días, por sublimar, cola de sublimación. **Nunca escribe** en el panel de producción.
 - **Facturación**: se puede **adjuntar el archivo de la factura** y el **comprobante de pago** (PDF o foto, máx. 4 MB;
   se guardan en la hoja Imagenes como `fac…`/`pag…`; `cot.factura.archivo` / `cot.factura.comprobante`).
 - Cotizaciones: sin columna "Siguiente paso"; Enviada / Aprobar / Rechazar van junto a Abrir, PDF, Duplicar, Borrar.

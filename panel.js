@@ -448,47 +448,67 @@ function otsProduccion() {
     return o;
   });
 }
-const ETQ_PROD = [['curso', 'En curso'], ['atrasadas', 'Atrasadas'], ['semana', 'Próximos 7 días'], ['entregadas', 'Entregadas'], ['todas', 'Todas']];
-const enFiltroProd = (o, f) => f === 'todas' || (f === 'curso' && !o.entregada) || (f === 'atrasadas' && o.atrasada) || (f === 'semana' && o.semana) || (f === 'entregadas' && o.entregada);
+const ETQ_PROD = [['curso', 'Vigentes'], ['entregadas', 'Entregadas'], ['todas', 'Todo']];
+let PROD_SUBLI = false, PROD_APLI = false, PROD_CHILE = false;
+const enFiltroProd = (f, filtro) => filtro === 'todas' || (filtro === 'curso' && !f.entregada) || (filtro === 'entregadas' && f.entregada) ||
+  (filtro === 'atrasadas' && !f.entregada && f.fCom && f.fCom < hoy()) || (filtro === 'semana' && !f.entregada && f.fCom >= hoy() && f.fCom <= sumarDias(hoy(), 7));
+const esChile = f => /chile|pab\.?\s*nac|pabell[oó]n nacional/i.test(f.producto);
+/* Producción: la misma tabla del panel de producción del taller, en solo lectura. */
 function renderProduccion() {
   if (!PROD) {
     $('#prodKpis').innerHTML = ''; $('#filtrosProd').innerHTML = '';
     $('#prodCuerpo').innerHTML = PROD_ERROR
       ? `<div class="card empty">No se pudo leer el panel de producción (${esc(PROD_ERROR)}). <a href="${PANEL_PROD_WEB}" target="_blank" rel="noopener">Abrir el panel de producción ↗</a> · <a href="#" data-prod-recargar>Reintentar</a></div>`
-      : '<div class="card empty">Cargando el panel de producción…</div>';
+      : '<div class="card empty"><span class="spinner"></span> Leyendo el panel de producción… (trae todas las fotos, puede tardar unos segundos)</div>';
     if (!PROD_ERROR) cargarProduccion().then(renderProduccion, renderProduccion);
     return;
   }
-  const ots = otsProduccion(), curso = ots.filter(o => !o.entregada);
-  const unidades = curso.reduce((s, o) => s + o.unidades, 0);
-  const atr = curso.filter(o => o.atrasada), sem = curso.filter(o => o.semana);
+  const filas = PROD.filas, vig = filas.filter(f => !f.entregada);
+  const otsVig = new Set(vig.map(f => f.ot)), atr = new Set(vig.filter(f => f.fCom && f.fCom < hoy()).map(f => f.ot));
+  const sem = new Set(vig.filter(f => f.fCom >= hoy() && f.fCom <= sumarDias(hoy(), 7)).map(f => f.ot));
+  const unidades = vig.reduce((s, f) => s + f.cant, 0);
   const clicK = (f, html) => `<div class="kpi clic ${FILTRO_PROD === f ? 'sel' : ''}" data-fprod="${f}" tabindex="0">${html}</div>`;
   $('#prodKpis').innerHTML = [
-    clicK('curso', `<small>OT en curso</small><b>${curso.length}</b><span>${unidades} producto${unidades === 1 ? '' : 's'} por entregar</span>`),
-    clicK('atrasadas', `<small>Atrasadas</small><b class="${atr.length ? 'neg' : ''}">${atr.length}</b><span>pasó la fecha comprometida</span>`),
-    clicK('semana', `<small>Se entregan en 7 días</small><b>${sem.length}</b><span>OT comprometidas esta semana</span>`),
-    clicK('entregadas', `<small>Entregadas</small><b>${ots.length - curso.length}</b><span>OT completas en el panel</span>`),
-    kpi('En sublimación', String(PROD.enSublimacion), 'en la cola de sublimado'),
+    clicK('curso', `<small>OT vigentes</small><b>${otsVig.size}</b><span>${unidades} producto${unidades === 1 ? '' : 's'} por entregar</span>`),
+    clicK('atrasadas', `<small>Atrasadas</small><b class="${atr.size ? 'neg' : ''}">${atr.size}</b><span>OT que pasaron la fecha comprometida</span>`),
+    clicK('semana', `<small>Se entregan en 7 días</small><b>${sem.size}</b><span>OT comprometidas esta semana</span>`),
+    kpi('Por sublimar', String(vig.filter(f => f.sublimada).length), 'productos vigentes con sublimado'),
+    kpi('En cola de sublimación', String(PROD.enSublimacion), 'ítems en la pestaña Sublimación'),
   ].join('');
-  $('#filtrosProd').innerHTML = ETQ_PROD.map(([k, l]) => `<button type="button" class="chip ${FILTRO_PROD === k ? 'active' : ''}" data-fprod="${k}">${l} <small>${ots.filter(o => enFiltroProd(o, k)).length}</small></button>`).join('') +
-    `<span class="prod-act">Actualizado ${PROD.hora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · <a href="#" data-prod-recargar>actualizar</a> · <a href="${PANEL_PROD_WEB}" target="_blank" rel="noopener">abrir panel de producción ↗</a></span>`;
   const q = normTxt($('#buscaProd').value || '');
-  const vis = ots.filter(o => enFiltroProd(o, FILTRO_PROD) && (!q || normTxt([o.ot, o.cliente, o.comuna, ...o.items.map(i => i.producto)].join(' ')).includes(q)))
-    .sort((a, b) => FILTRO_PROD === 'entregadas' || FILTRO_PROD === 'todas' ? (+b.ot || 0) - (+a.ot || 0) : String(a.fCom || '9999').localeCompare(String(b.fCom || '9999')));
-  $('#prodCuerpo').innerHTML = vis.length ? `<div class="prod-ots">${vis.slice(0, 120).map(o => `
-    <div class="card prod-ot ${o.atrasada ? 'atr' : ''}">
-      <div class="po-head"><b>OT ${esc(o.ot)}</b><span>${esc(o.cliente)}${o.comuna ? ' · ' + esc(o.comuna) : ''}</span>
-        <span class="po-fecha">${o.entregada ? '<span class="badge Entregada">Entregada</span>' : `${o.atrasada ? '<span class="badge Vencida">Atrasada</span>' : ''} compromiso <b>${fechaCL(o.fCom) || '—'}</b>`}</span></div>
-      ${o.items.map(i => `<div class="po-item ${i.entregada ? 'ok' : ''}">
-        ${i.foto ? `<img src="${i.foto}" alt="" loading="lazy">` : `<span class="po-sinfoto">${ICONO_BANDERA}</span>`}
-        <div class="po-txt"><b>${esc(i.producto || 'Producto')}</b>
-          <span>${i.cant} u.${i.medida ? ' · ' + esc(i.medida) : ''}${i.tela ? ' · ' + esc(i.tela) : ''}${i.sublimada ? ' · sublimada' : ''}${i.aplicada ? ' · aplicada' : ''}</span>
-          ${i.obs ? `<small>${esc(i.obs)}</small>` : ''}</div>
-        <span class="po-etapa">${i.entregada ? '✓ entregado' : esc(i.etapa || 'sin etapa')}</span></div>`).join('')}
-    </div>`).join('')}</div>${vis.length > 120 ? '<p class="hint">Se muestran las primeras 120 OT. Usa el buscador para encontrar otras.</p>' : ''}`
-    : '<div class="card empty">No hay OT en este filtro.</div>';
+  const vis = filas.filter(f => enFiltroProd(f, FILTRO_PROD) && (!PROD_SUBLI || f.sublimada) && (!PROD_APLI || f.aplicada) && (!PROD_CHILE || esChile(f)) &&
+      (!q || normTxt([f.ot, f.cliente, f.comuna, f.producto, f.etapa, f.obs].join(' ')).includes(q)))
+    .sort((a, b) => FILTRO_PROD === 'curso' || FILTRO_PROD === 'atrasadas' || FILTRO_PROD === 'semana'
+      ? String(a.fCom || '9999').localeCompare(String(b.fCom || '9999')) || String(a.ot).localeCompare(String(b.ot), 'es', { numeric: true })
+      : String(b.ot).localeCompare(String(a.ot), 'es', { numeric: true }));
+  $('#filtrosProd').innerHTML = `<span class="seg">
+      <button type="button" class="${PROD_SUBLI ? 'on' : ''}" data-tprod="subli">Subli</button><button type="button" class="${PROD_APLI ? 'on' : ''}" data-tprod="apli">Apli</button>
+      <button type="button" class="${PROD_CHILE ? 'on' : ''}" data-tprod="chile" title="Solo banderas chilenas">🇨🇱</button></span>
+    <span class="seg">${ETQ_PROD.map(([k, l]) => `<button type="button" class="${FILTRO_PROD === k ? 'on' : ''}" data-fprod="${k}">${l}</button>`).join('')}</span>
+    ${FILTRO_PROD === 'atrasadas' || FILTRO_PROD === 'semana' ? `<span class="filtro-extra">${FILTRO_PROD === 'atrasadas' ? 'Solo atrasadas' : 'Próximos 7 días'} <button type="button" data-fprod="curso">✕</button></span>` : ''}
+    <span class="prod-act">${vis.length} fila${vis.length === 1 ? '' : 's'} · actualizado ${PROD.hora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · <a href="#" data-prod-recargar>actualizar</a> · <a href="${PANEL_PROD_WEB}" target="_blank" rel="noopener">abrir panel de producción ↗</a></span>`;
+  const check = v => `<span class="ck ${v ? 'on' : ''}">${v ? '✓' : ''}</span>`;
+  let prev = null;
+  const filasHtml = vis.slice(0, 400).map(f => {
+    const dif = f.fCom ? diasEntre(hoy(), f.fCom) : null, corte = prev !== null && prev !== f.ot; prev = f.ot;
+    return `<tr class="${corte ? 'corte' : ''} ${f.entregada ? 'entregada' : ''}">
+      <td class="ot">${esc(f.ot)}</td><td class="cli">${esc(f.cliente)}</td><td>${esc(f.comuna)}</td>
+      <td class="nw">${fechaCL(f.fCom) || '—'}</td>
+      <td class="num dif ${dif != null && dif < 0 && !f.entregada ? 'neg' : ''}">${f.entregada ? '✓' : dif ?? ''}</td>
+      <td class="foto">${f.foto ? `<img src="${f.foto}" alt="" loading="lazy">` : ''}</td>
+      <td class="prodn">${esc(f.producto)}</td><td class="nw">${esc(f.medida)}</td><td>${esc(f.tela)}</td>
+      <td class="num">${f.cant}</td><td class="c">${check(f.sublimada)}</td><td class="c">${check(f.aplicada)}</td>
+      <td class="obs">${esc(f.obs)}</td><td class="status">${esc(f.etapa)}</td></tr>`;
+  }).join('');
+  $('#prodCuerpo').innerHTML = vis.length ? `<div class="card table-wrap"><table class="list prod-tabla">
+      <thead><tr><th>ID</th><th>Cliente</th><th>Comuna</th><th>F. comp.</th><th class="num">Dif</th><th>Foto</th><th>Producto</th><th>Medida</th><th>Tela</th>
+        <th class="num">Cant</th><th class="c">Subli</th><th class="c">Apli</th><th>Obs</th><th>Status</th></tr></thead><tbody>${filasHtml}</tbody></table></div>
+      ${vis.length > 400 ? '<p class="hint">Se muestran las primeras 400 filas. Usa el buscador para encontrar otras.</p>' : ''}`
+    : '<div class="card empty">No hay filas en este filtro.</div>';
 }
 $('#view-produccion').addEventListener('click', e => {
+  const t = e.target.closest('[data-tprod]');
+  if (t) { const k = t.dataset.tprod; if (k === 'subli') PROD_SUBLI = !PROD_SUBLI; if (k === 'apli') PROD_APLI = !PROD_APLI; if (k === 'chile') PROD_CHILE = !PROD_CHILE; renderProduccion(); return; }
   const f = e.target.closest('[data-fprod]'); if (f) { FILTRO_PROD = f.dataset.fprod; renderProduccion(); return; }
   if (e.target.closest('[data-prod-recargar]')) { e.preventDefault(); PROD = null; PROD_ERROR = ''; renderProduccion(); }
 });
