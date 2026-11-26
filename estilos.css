@@ -563,3 +563,49 @@ table.comp td.arg .est{color:#8a6814}
 .dc-acc{justify-content:space-between;margin-top:14px}
 #dlgCosto{max-width:540px}
 .dc-acc{flex-wrap:nowrap}
+
+/* referenciales */
+.cot-ref{margin:6px 0 0;font-size:9.5px;font-style:italic;color:var(--mu)}
+.ot-ref{margin:6px 0 0;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7a6a00;background:var(--am);display:inline-block;padding:2px 10px;border-radius:4px}
+
+/* método matriz / tradicional */
+.metodo{display:inline-flex;background:#ebe8e1;border-radius:7px;padding:2px;gap:2px;margin-bottom:2px;align-self:flex-start}
+.metodo button{border:0;background:none;font:inherit;font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;cursor:pointer;color:var(--muted)}
+.metodo button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.costo-btn.trad{border-color:#b9cbe0;background:#f4f8fc}
+.costo-btn b.vacio{color:#5b7aa0}
+.item-precio{grid-template-columns:130px 230px 1fr}
+
+/* cuadro tradicional */
+#dlgTrad{max-width:640px}
+#dlgTrad h2{margin:0}
+.tr-tabla{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+.tr-tabla thead th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:right;padding:4px 6px}
+.tr-tabla th{text-align:left;font-weight:700;padding:3px 6px;white-space:nowrap}
+.tr-tabla th small{font-weight:500;color:var(--muted);margin-left:4px}
+.tr-tabla td{padding:3px 6px;text-align:right;white-space:nowrap}
+.tr-tabla td input{width:100px;text-align:right;padding:5px 7px}
+.tr-tabla td input.pct{width:64px}
+.tr-tabla td span{color:var(--muted);margin-left:3px}
+.tr-tabla td.pu{font-weight:700;font-variant-numeric:tabular-nums;min-width:90px}
+.tr-tabla td .ref{color:var(--muted);font-size:12px}
+.tr-tabla tbody tr{border-bottom:1px solid #f0ede6}
+.tr-tabla tr.sub th,.tr-tabla tr.sub td{background:#fbeeee;font-weight:800}
+.tr-tabla tfoot tr.total th,.tr-tabla tfoot tr.total td{background:#f3efe4;font-size:15px;font-weight:800;padding:8px 6px}
+.tr-tabla tfoot tr.precio th,.tr-tabla tfoot tr.precio td{background:var(--blue);color:#fff;font-size:16px;font-weight:800;padding:9px 6px}
+.tr-tabla tfoot tr.precio small{color:#e3cf9b}
+.tr-tabla tfoot tr.precio small b{color:#fff}
+
+/* galería */
+#dlgGaleria{max-width:980px;width:calc(100% - 24px);padding:0;max-height:calc(100vh - 24px)}
+.gal-head{position:sticky;top:0;background:#fff;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--line);z-index:1}
+.gal-head h2{margin:0}
+.gal-head input{flex:1;min-width:200px}
+.gal-cuerpo{padding:6px 18px 18px}
+.gal-cuerpo h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-d);margin:14px 0 8px}
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.gal-item{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:10px;padding:6px;background:#fff;cursor:pointer;font:inherit;text-align:left}
+.gal-item:hover{border-color:var(--accent);box-shadow:0 0 0 2px #f1e3bd}
+.gal-item img,.gal-vacia{width:100%;height:100px;object-fit:contain;background:#f6f4ef;border-radius:6px;display:grid;place-items:center;color:#c9c1b0}
+.gal-nom{font-size:12px;font-weight:700;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gal-usos{font-size:11px;color:var(--muted)}

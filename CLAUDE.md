@@ -36,6 +36,20 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   edita el total, la diferencia queda como "Ajuste manual"). "Volver a la matriz" deshace los cambios.
 - El costo unitario siempre se puede escribir a mano.
 
+## Método por producto
+- **Matriz:** costo desde la tabla de costos por componentes; margen sobre el precio de venta.
+- **Tradicional:** réplica del Excel "COSTO BISTRECH" del taller (cuadro al pinchar el costo):
+  tela = (largo × alto) ÷ 1,4 × 1,2 × precio tela; crea = tela/12 (1 faz); extra tela = tela (2/Faz);
+  vaina, argollas, armado (×1), cortado/festón/limpieza/embolsado = % del armado; sublimado =
+  extra tela × 2 × precio; Subtotal A; flete 20 % + costo financiero 7 % + imprevisto 7 % = Subtotal B;
+  costo = A + B. **"Margen" del Excel = recargo sobre el costo** (precio = costo × (1 + %)); se muestra
+  además el margen real sobre venta. Sin costo hasta que se costea.
+
+## Imágenes
+- Biblioteca en la nube (Config `biblioteca` + miniaturas en la hoja Imagenes): al agregar imagen se
+  abre una galería con sugeridas por nombre del producto, las de uso frecuente y el resto; aprende
+  de cada uso. La cotización y la OT dicen que las imágenes son referenciales.
+
 ## Precios y margen
 - El margen es **sobre el precio de venta**: `precio = costo / (1 − margen)`, redondeado hacia arriba.
 - Descuento al cliente: % sobre el precio de venta; baja el neto y el margen.

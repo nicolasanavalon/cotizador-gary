@@ -43,6 +43,7 @@
           <label>Email<input data-c="email" type="email"></label>
           <label>Dirección de despacho<input data-c="direccion"></label>
           <label>Comuna / ciudad<input data-c="comuna"></label>
+          <label class="wide">ID cotización del cliente (ej. Mercado Público)<input data-d="idExterno" placeholder="Ej: 696750-58-COT26"></label>
           <label>Región<select data-c="region" id="selRegion"></select></label>
         </div>
       </div>
@@ -254,6 +255,32 @@
 <div id="print" class="print-only"></div>
 
 <div id="toast" class="no-print"></div>
+
+<dialog id="dlgGaleria" class="no-print">
+  <div class="gal-head">
+    <h2>Imágenes</h2>
+    <input id="galBuscar" placeholder="Buscar por nombre (ej: pabellón, bomberos…)">
+    <span class="actions"><button class="btn primary" id="galSubir">＋ Subir desde el computador</button><button class="btn ghost" id="galCerrar">Cerrar</button></span>
+  </div>
+  <div id="galCuerpo" class="gal-cuerpo"></div>
+</dialog>
+
+<dialog id="dlgTrad" class="no-print">
+  <div class="dc-head"><h2 id="trTitulo">Costeo tradicional</h2><p class="hint" id="trSub"></p></div>
+  <table class="tr-tabla">
+    <thead><tr><th></th><th>Cant.</th><th>Costo</th><th>P/unitario</th></tr></thead>
+    <tbody id="trFilas"></tbody>
+    <tfoot>
+      <tr class="total"><th>Total A + B <small>costo unitario</small></th><td></td><td></td><td id="trTotal"></td></tr>
+      <tr><th>Margen <small>recargo sobre el costo, como el Excel</small></th><td><input class="pct" id="trRecargo" inputmode="decimal"><span>%</span></td><td></td><td id="trMargen"></td></tr>
+      <tr class="precio"><th>P/unit neto <small>margen real sobre venta: <b id="trReal"></b></small></th><td></td><td></td><td id="trPrecio"></td></tr>
+    </tfoot>
+  </table>
+  <div class="actions dc-acc">
+    <span class="actions"><button class="btn ghost" id="trDefecto">Restablecer</button><button class="btn ghost" id="trGuardarDef" title="Usar estos precios y % en los próximos productos">Guardar como predeterminado</button></span>
+    <span class="actions"><button class="btn ghost" id="trCancelar">Cancelar</button><button class="btn primary" id="trAplicar">Aplicar</button></span>
+  </div>
+</dialog>
 
 <dialog id="dlgCosto" class="no-print">
   <div class="dc-head"><div><h2 id="dcTitulo">Desglose del costo</h2><p class="hint" id="dcSub"></p></div></div>

@@ -411,22 +411,94 @@ async function comprimirImagen(file) {
   g.drawImage(cv, 0, 0, fin.width, fin.height);
   return fin.toDataURL('image/jpeg', 0.82);
 }
+/* Miniatura liviana para la biblioteca (máx. 260 px). */
+function miniatura(dataUrl) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 260 / Math.max(img.width, img.height));
+      const [cv, g] = lienzo(img.width * k, img.height * k);
+      g.drawImage(img, 0, 0, cv.width, cv.height); res(cv.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = () => res(null); img.src = dataUrl;
+  });
+}
 async function subirImagen(it, file) {
   let data;
   toast('Procesando ' + (/\.(pdf|ai)$/i.test(file.name) ? 'PDF' : 'imagen') + '…');
   try { data = await comprimirImagen(file); }
   catch (e) { toast('No se pudo leer el archivo (' + e.message + '). Formatos: JPG, PNG, SVG o PDF.'); return; }
-  const id = 'img' + uid();
-  guardarImgLocal(id, data);
+  const id = 'img' + uid(), thumb = await miniatura(data), thumbId = thumb ? 'th' + id : null;
+  guardarImgLocal(id, data); if (thumb) guardarImgLocal(thumbId, thumb);
   it.imagen = id; renderItems();
+  registrarEnBiblioteca(id, it, thumbId, (file.name || '').replace(/\.[^.]+$/, ''));
   if (nubeActiva()) {
-    try { await api('guardarImagen', { id, data }); toast('Imagen guardada'); }
+    try {
+      if (thumb) await api('guardarImagen', { id: thumbId, data: thumb });
+      await api('guardarImagen', { id, data }); toast('Imagen guardada en la biblioteca');
+    }
     catch (e) {
       toast(/desconocida/i.test(e.message) ? 'Falta actualizar el servidor para guardar imágenes en la nube (la imagen quedó solo en este equipo)'
         : 'No se pudo subir la imagen: ' + e.message);
     }
   }
 }
+
+/* ---------- Biblioteca de imágenes (en la nube, en Config 'biblioteca') ----------
+   Cada entrada: { i: id imagen, t: id miniatura, n: [nombres de producto con que se usó], u: usos, f: última fecha } */
+const normTxt = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const palabras = s => normTxt(s).split(/[^a-z0-9ñ]+/).filter(w => w.length >= 4);
+function biblioteca() {
+  if (!Array.isArray(CFG.biblioteca)) CFG.biblioteca = [];
+  // aprende también de las cotizaciones ya guardadas
+  const ya = new Set(CFG.biblioteca.map(e => e.i));
+  for (const c of COTS) for (const x of (c.items || [])) if (x.imagen && !ya.has(x.imagen)) {
+    ya.add(x.imagen); CFG.biblioteca.push({ i: x.imagen, t: null, n: [x.titulo || tituloAuto(normalizarItem({ ...x }))].filter(Boolean), u: 1, f: c.fecha || hoy() });
+  }
+  return CFG.biblioteca;
+}
+function registrarEnBiblioteca(id, it, thumbId, extra) {
+  const bib = biblioteca(); let e = bib.find(x => x.i === id);
+  if (!e) { e = { i: id, t: thumbId || null, n: [], u: 0, f: hoy() }; bib.push(e); }
+  if (thumbId) e.t = thumbId;
+  const nombre = (it.titulo || tituloAuto(it) || extra || '').trim().slice(0, 50);
+  if (nombre && !e.n.some(x => normTxt(x) === normTxt(nombre))) e.n = [nombre, ...e.n].slice(0, 4);
+  e.u = (+e.u || 0) + 1; e.f = hoy();
+  saveCfg(); subirConfig({ biblioteca: bib }).catch(() => {});
+}
+let GAL = null;
+async function abrirGaleria(it) {
+  GAL = { it };
+  $('#galBuscar').value = it.titulo || tituloAuto(it) || '';
+  $('#dlgGaleria').showModal();
+  renderGaleria();
+  const bib = biblioteca();
+  await asegurarImagenes(bib.map(e => ({ imagen: e.t || e.i })));
+  if ($('#dlgGaleria').open) renderGaleria();
+}
+function renderGaleria() {
+  const q = $('#galBuscar').value, pq = palabras(q), bib = biblioteca();
+  const coincide = e => pq.length && e.n.some(n => palabras(n).some(w => pq.some(p => w.startsWith(p) || p.startsWith(w))));
+  const tarjeta = e => { const src = imgDe(e.t) || imgDe(e.i);
+    return `<button type="button" class="gal-item" data-gal="${esc(e.i)}">${src ? `<img src="${src}" alt="">` : `<span class="gal-vacia">${ICONO_BANDERA}</span>`}
+      <span class="gal-nom">${esc(e.n[0] || 'Sin nombre')}</span><span class="gal-usos">${e.u} uso${e.u === 1 ? '' : 's'}</span></button>`; };
+  const porUso = [...bib].sort((a, b) => (b.u - a.u) || String(b.f).localeCompare(String(a.f)));
+  const sug = porUso.filter(coincide);
+  const frec = porUso.filter(e => !sug.includes(e)).slice(0, 8);
+  const resto = [...bib].filter(e => !sug.includes(e) && !frec.includes(e)).sort((a, b) => String(b.f).localeCompare(String(a.f)));
+  const filtro = q.trim() && !sug.length ? '' : '';
+  const sec = (tit, arr) => arr.length ? `<h3>${tit}</h3><div class="gal-grid">${arr.map(tarjeta).join('')}</div>` : '';
+  $('#galCuerpo').innerHTML = !bib.length ? '<p class="empty">Todavía no hay imágenes. Sube la primera: queda guardada en la nube para las próximas cotizaciones.</p>'
+    : sec(`Sugeridas para “${esc(q)}”`, sug) + sec('De uso frecuente', frec) + sec('Todas las demás', resto) + filtro;
+}
+$('#galBuscar').addEventListener('input', renderGaleria);
+$('#galCerrar').onclick = () => $('#dlgGaleria').close();
+$('#galSubir').onclick = () => { const it = GAL.it; $('#dlgGaleria').close(); document.querySelector(`.item[data-id="${it.id}"] [data-file]`)?.click(); };
+$('#galCuerpo').addEventListener('click', async e => {
+  const id = e.target.closest('[data-gal]')?.dataset.gal; if (!id) return;
+  const it = GAL.it; it.imagen = id; registrarEnBiblioteca(id, it);
+  $('#dlgGaleria').close(); await asegurarImagenes([it]); renderItems();
+});
 
 const vistaActual = () => $('.view.active')?.id.replace('view-', '');
 function refrescarVista() {
@@ -469,9 +541,16 @@ function precioUnitario(costo, margenPct) {
   const r = Math.max(1, +CFG.redondeo || 1);
   return Math.ceil(costo / (1 - m) / r) * r;   // margen sobre precio de venta
 }
+/* Método Tradicional (como el Excel del taller): "margen" = recargo sobre el costo → precio = costo × (1 + %) */
+function precioRecargo(costo, recargoPct) {
+  if (costo <= 0) return 0;
+  const r = Math.max(1, +CFG.redondeo || 1);
+  return Math.ceil(costo * (1 + recargoPct / 100) / r) * r;
+}
+const esTrad = it => it.metodo === 'tradicional';
 function calcItem(it) {
   const costoU = +it.costo || 0, cant = +it.cantidad || 0;
-  const precioU = precioUnitario(costoU, +it.margen || 0);
+  const precioU = esTrad(it) ? precioRecargo(costoU, +it.recargo || 0) : precioUnitario(costoU, +it.margen || 0);
   const venta = precioU * cant, costo = costoU * cant, margen = venta - costo;
   return { costoU, cant, precioU, venta, costo, margen, margenPct: venta ? margen / venta : 0 };
 }
@@ -596,6 +675,12 @@ function mostrar(view) {
 $$('#tabs button').forEach(b => b.onclick = () => mostrar(b.dataset.view));
 
 /* ---------------- Editor de cotización ---------------- */
+const RECARGOS_RAPIDOS = [30, 40, 50, 60];
+function chipsRecargo(valor) {
+  const v = +valor, rapido = RECARGOS_RAPIDOS.includes(v);
+  return RECARGOS_RAPIDOS.map(m => `<button type="button" class="chip ${v === m ? 'active' : ''}" data-rg="${m}">${m}%</button>`).join('') +
+    `<span class="chip-input ${rapido ? '' : 'active'}">otro <input type="number" min="0" step="0.5" data-rg-manual value="${rapido ? '' : esc(valor)}" placeholder="—">%</span>`;
+}
 function chipsHtml(valor, attr) {
   const esRapido = MARGENES_RAPIDOS.includes(+valor);
   return MARGENES_RAPIDOS.map(m =>
@@ -758,9 +843,16 @@ function renderItems() {
       </div>
       <div class="item-precio">
         <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
-        <label>Costo unit. neto<button type="button" class="costo-btn" data-act="desglose" title="Ver y editar el desglose">
-            <b>${clp(it.costo)}</b><span>desglose ▸</span></button><small class="nota">${notaCosto}</small></label>
-        <div class="item-margen"><span class="lbl">Margen</span><span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>
+        <label>Costo unit. neto
+          <span class="metodo" role="group"><button type="button" class="${esTrad(it) ? '' : 'on'}" data-metodo="matriz">Matriz</button><button type="button" class="${esTrad(it) ? 'on' : ''}" data-metodo="tradicional">Tradicional</button></span>
+          ${esTrad(it)
+            ? `<button type="button" class="costo-btn trad" data-act="trad" title="Costeo tradicional (como el Excel)">${+it.costo ? `<b>${clp(it.costo)}</b><span>costeo ▸</span>` : '<b class="vacio">Costear</b><span>abrir ▸</span>'}</button>
+               <small class="nota">${+it.costo ? 'costeo tradicional (Excel)' : 'pincha para calcular como en el Excel'}</small>`
+            : `<button type="button" class="costo-btn" data-act="desglose" title="Ver y editar el desglose"><b>${clp(it.costo)}</b><span>desglose ▸</span></button><small class="nota">${notaCosto}</small>`}</label>
+        ${esTrad(it)
+          ? `<div class="item-margen"><span class="lbl">Recargo s/costo</span><span class="chips">${chipsRecargo(it.recargo)}</span>
+               <small class="nota">${+it.costo ? 'margen real sobre venta ' + pct(calcItem(it).margenPct) : 'como el “margen” del Excel'}</small></div>`
+          : `<div class="item-margen"><span class="lbl">Margen</span><span class="chips">${chipsHtml(it.margen, 'data-m')}</span></div>`}
       </div>
       <div class="item-res" data-res></div>
       <div class="item-desc">
@@ -882,6 +974,114 @@ $('#dcMatriz').onclick = () => {
   $('#dlgCosto').close(); renderItems();
 };
 
+/* ---------- Costeo TRADICIONAL (réplica del Excel "COSTO BISTRECH" del taller) ---------- */
+const TRAD_DEF = { tela: 730, vaina: 250, argolla: 200, armado: 2500, sublimado: 2500,
+  cortado: 0.20, feston: 0.20, limpieza: 0.05, embolsado: 0.05, flete: 0.20, finan: 0.07, imprev: 0.07, recargo: 50 };
+const tradDef = () => ({ ...TRAD_DEF, ...(CFG.tradDef || {}) });
+/* filas: [clave, etiqueta, tipo]  tipo 'mult' = cant × costo · 'pct' = % del costo de armado · 'arm' = armado */
+const TRAD_FILAS = [['tela', 'Tela', 'mult'], ['crea', 'Crea', 'mult'], ['extra', 'Extra tela', 'mult'], ['vaina', 'Vaina', 'mult'],
+  ['argollas', 'Argollas', 'mult'], ['armado', 'Armado', 'arm'], ['cortado', 'Cortado', 'pct'], ['feston', 'Festón', 'pct'],
+  ['limpieza', 'Limpieza', 'pct'], ['embolsado', 'Embolsado', 'pct'], ['sublimado', 'Sublimado', 'mult']];
+function dimsDe(medida) {
+  const m = String(medida || '').replace(/,/g, '.').match(/([\d.]+)\s*[x×*]\s*([\d.]+)/i);
+  if (!m) return null;
+  const a = parseFloat(m[1]), b = parseFloat(m[2]);
+  return { mayor: Math.max(a, b), menor: Math.min(a, b) };
+}
+function tradDefaults(it) {
+  const td = tradDef(), dm = dimsDe(medidaEf(it)) || { mayor: 0, menor: 0 };
+  const dfaz = /2\/Faz/i.test(it.tipo || '');
+  const precioTela = +(compTelas().find(t => t.nombre === it.material)?.precio) || td.tela;
+  const telaCant = dm.mayor * dm.menor / 1.4 * 1.2;          // Excel: ((largo × alto) / 1,4) × 1,2
+  const extra = dfaz ? telaCant : 0;
+  const r2 = x => Math.round(x * 100) / 100;
+  return {
+    tela: { cant: telaCant, costo: precioTela },
+    crea: { cant: dfaz ? 0 : telaCant / 12, costo: precioTela },
+    extra: { cant: extra, costo: precioTela },
+    vaina: { cant: r2(dm.menor * 2 + 0.1), costo: td.vaina },
+    argollas: { cant: medidaEf(it) ? cantidadArgollas(medidaEf(it)).n : 0, costo: td.argolla },
+    armado: { cant: 1, costo: td.armado },
+    cortado: { cant: td.cortado }, feston: { cant: dfaz ? 0 : td.feston }, limpieza: { cant: td.limpieza }, embolsado: { cant: td.embolsado },
+    sublimado: { cant: extra * 2, costo: td.sublimado },
+    flete: td.flete, finan: td.finan, imprev: td.imprev,
+  };
+}
+function calcTrad(t) {
+  const armado = (+t.armado.costo || 0) * (+t.armado.cant || 0);
+  const pu = {};
+  for (const [k, , tipo] of TRAD_FILAS) {
+    pu[k] = tipo === 'arm' ? armado : tipo === 'pct' ? (+t.armado.costo || 0) * (+t[k].cant || 0) : (+t[k].cant || 0) * (+t[k].costo || 0);
+  }
+  const subA = Object.values(pu).reduce((s, v) => s + v, 0);
+  const flete = subA * (+t.flete || 0), finan = subA * (+t.finan || 0), imprev = subA * (+t.imprev || 0);
+  const subB = flete + finan + imprev;
+  return { pu, subA, flete, finan, imprev, subB, total: subA + subB };
+}
+let TR = null;
+function abrirTrad(it) {
+  TR = { it, t: JSON.parse(JSON.stringify(it.trad || tradDefaults(it))), recargo: +it.recargo || tradDef().recargo };
+  $('#trTitulo').textContent = it.titulo || tituloAuto(it) || 'Producto';
+  $('#trSub').textContent = [esBandera(it) ? it.tipo : productoEf(it), materialEf(it), medidaEf(it), (+it.cantidad || 0) + ' u.'].filter(Boolean).join(' · ');
+  renderTrad();
+  $('#dlgTrad').showModal();
+}
+const fmtCant = v => (Math.round((+v || 0) * 100) / 100).toLocaleString('es-CL', { maximumFractionDigits: 2 });
+const fmtPct = v => (Math.round((+v || 0) * 1000) / 10).toLocaleString('es-CL', { maximumFractionDigits: 1 });
+function renderTrad(soloNumeros) {
+  const t = TR.t, c = calcTrad(t);
+  if (!soloNumeros) {
+    $('#trFilas').innerHTML = TRAD_FILAS.map(([k, l, tipo]) => {
+      const f = t[k];
+      const cant = tipo === 'pct' ? `<input class="pct" data-tr="${k}" data-c="cant" value="${fmtPct(f.cant)}" inputmode="decimal"><span>%</span>`
+        : `<input data-tr="${k}" data-c="cant" value="${fmtCant(f.cant)}" inputmode="decimal">`;
+      const costo = tipo === 'pct' ? `<span class="ref" data-ref="${k}"></span>` : `<input data-money data-tr="${k}" data-c="costo" value="${miles(f.costo)}" inputmode="numeric">`;
+      return `<tr><th>${l}${k === 'tela' && materialEf(TR.it) ? ` <small>${esc(materialEf(TR.it))}</small>` : ''}</th><td>${cant}</td><td>${costo}</td><td class="pu" data-pu="${k}"></td></tr>`;
+    }).join('') +
+      `<tr class="sub"><th>Subtotal A</th><td></td><td></td><td class="pu" id="trSubA"></td></tr>` +
+      [['flete', 'Flete'], ['finan', 'Costo financiero'], ['imprev', 'Imprevisto']].map(([k, l]) =>
+        `<tr><th>${l}</th><td><input class="pct" data-trp="${k}" value="${fmtPct(t[k])}" inputmode="decimal"><span>%</span></td><td></td><td class="pu" data-pu="${k}"></td></tr>`).join('') +
+      `<tr class="sub"><th>Subtotal B</th><td></td><td></td><td class="pu" id="trSubB"></td></tr>`;
+    if (document.activeElement !== $('#trRecargo')) $('#trRecargo').value = fmtPct(TR.recargo / 100);
+  }
+  for (const [k] of TRAD_FILAS) $(`#trFilas [data-pu="${k}"]`).textContent = clp(c.pu[k]);
+  for (const k of ['cortado', 'feston', 'limpieza', 'embolsado']) $(`#trFilas [data-ref="${k}"]`).textContent = clp(c.pu[k]);
+  for (const k of ['flete', 'finan', 'imprev']) $(`#trFilas [data-pu="${k}"]`).textContent = clp(c[k]);
+  $('#trSubA').textContent = clp(c.subA); $('#trSubB').textContent = clp(c.subB);
+  $('#trTotal').textContent = clp(c.total);
+  const precio = precioRecargo(c.total, TR.recargo);
+  $('#trMargen').textContent = clp(c.total * TR.recargo / 100);
+  $('#trPrecio').textContent = clp(precio);
+  $('#trReal').textContent = precio ? pct((precio - c.total) / precio) : '0%';
+}
+const numDec = v => { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; };
+$('#dlgTrad').addEventListener('input', e => {
+  if (!TR) return;
+  const el = e.target;
+  if (el.dataset.tr) {
+    const f = TR.t[el.dataset.tr];
+    if (el.dataset.c === 'costo') f.costo = num(el.value);
+    else f.cant = el.classList.contains('pct') ? numDec(el.value) / 100 : numDec(el.value);
+  } else if (el.dataset.trp) TR.t[el.dataset.trp] = numDec(el.value) / 100;
+  else if (el.id === 'trRecargo') TR.recargo = numDec(el.value);
+  else return;
+  renderTrad(true);
+});
+$('#trCancelar').onclick = () => $('#dlgTrad').close();
+$('#trDefecto').onclick = () => { TR.t = tradDefaults(TR.it); renderTrad(); };
+$('#trGuardarDef').onclick = () => {
+  const t = TR.t;
+  CFG.tradDef = { tela: t.tela.costo, vaina: t.vaina.costo, argolla: t.argollas.costo, armado: t.armado.costo, sublimado: t.sublimado.costo,
+    cortado: t.cortado.cant, limpieza: t.limpieza.cant, embolsado: t.embolsado.cant, flete: t.flete, finan: t.finan, imprev: t.imprev, recargo: TR.recargo };
+  saveCfg(); subirConfig({ tradDef: CFG.tradDef }).then(() => toast('Valores por defecto guardados'), err => toast('No se pudo guardar: ' + err.message));
+  if (!nubeActiva()) toast('Valores por defecto guardados');
+};
+$('#trAplicar').onclick = () => {
+  const it = TR.it, c = calcTrad(TR.t);
+  it.trad = TR.t; it.costo = Math.round(c.total); it.recargo = TR.recargo; it.costoManual = false; it.desglose = null;
+  $('#dlgTrad').close(); renderItems();
+};
+
 const CAMPOS_DEF = ['producto', 'tipo', 'material', 'medida'];
 $('#items').addEventListener('change', e => {
   if (e.target.matches('[data-file]')) {
@@ -893,7 +1093,7 @@ $('#items').addEventListener('change', e => {
   if (f === 'vaina') { it.vaina = e.target.value; saveDraft(); return; }
   if (f === 'medidaOtra') {
     it.medidaOtra = normMedida(e.target.value);
-    const cm = costoMatriz(it); if (cm != null) { it.costo = cm; it.costoManual = false; it.desglose = null; }
+    const cm = costoMatriz(it); if (cm != null && !esTrad(it)) { it.costo = cm; it.costoManual = false; it.desglose = null; }
     renderItems(); return;
   }
   if (!CAMPOS_DEF.includes(f)) return;
@@ -904,7 +1104,7 @@ $('#items').addEventListener('change', e => {
     actualizarTituloAuto(it);
   }
   const cm = costoMatriz(it);
-  if (cm != null) { it.costo = cm; it.costoManual = false; it.desglose = null; }
+  if (cm != null && !esTrad(it)) { it.costo = cm; it.costoManual = false; it.desglose = null; }
   renderItems();
 });
 $('#items').addEventListener('input', e => {
@@ -921,6 +1121,7 @@ $('#items').addEventListener('input', e => {
   else if (f === 'materialOtro') { it.materialOtro = e.target.value; saveDraft(); }
   else if (f === 'medidaOtra') { it.medidaOtra = e.target.value; saveDraft(); }
   else if (f === 'descripcion' || f === 'obs' || f === 'titulo') { it[f] = e.target.value; saveDraft(); }
+  else if (e.target.hasAttribute('data-rg-manual')) { it.recargo = num(e.target.value); recalc(); }
   else if (e.target.hasAttribute('data-m-manual')) {
     it.margen = num(e.target.value);
     const box = e.target.closest('.item-margen');
@@ -932,13 +1133,22 @@ $('#items').addEventListener('input', e => {
 $('#items').addEventListener('click', e => {
   const it = itemDe(e.target); if (!it) return;
   if (e.target.dataset.m) { it.margen = +e.target.dataset.m; renderItems(); renderChipsGlobal(); }
+  if (e.target.dataset.rg) { it.recargo = +e.target.dataset.rg; renderItems(); }
+  const met = e.target.closest('[data-metodo]')?.dataset.metodo;
+  if (met && met !== (it.metodo || 'matriz')) {
+    it.metodo = met;
+    if (met === 'tradicional') { it.costo = it.trad ? Math.round(calcTrad(it.trad).total) : 0; it.recargo = it.recargo || tradDef().recargo; }
+    else { const cm = costoMatriz(it); it.costo = cm ?? 0; it.costoManual = false; it.desglose = null; }
+    renderItems(); return;
+  }
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'del') { D.items = D.items.filter(x => x !== it); renderItems(); renderChipsGlobal(); }
   if (act === 'dup') { const i = D.items.indexOf(it); D.items.splice(i + 1, 0, { ...it, id: uid() }); renderItems(); }
-  if (act === 'img') e.target.closest('.item').querySelector('[data-file]').click();
+  if (act === 'img') abrirGaleria(it);
   if (act === 'sinimg') { it.imagen = null; renderItems(); }
   if (act === 'matriz') { e.preventDefault(); it.costo = costoMatriz(it) ?? it.costo; it.costoManual = false; it.desglose = null; renderItems(); }
   if (act === 'desglose') abrirDesglose(it);
+  if (act === 'trad') abrirTrad(it);
 });
 $('#chipsGlobal').addEventListener('click', e => {
   if (!e.target.dataset.mg) return;
@@ -1010,7 +1220,7 @@ function validar() {
   if (sinPrecio) { toast('Hay un producto sin costo: revisa tipo, material y medida'); return false; }
   return true;
 }
-const firmaCot = c => JSON.stringify([c.cliente, c.items, c.condPago, c.plazo, c.validez, c.garantia, c.obs, +c.descuento || 0,
+const firmaCot = c => JSON.stringify([c.cliente, c.idExterno || '', c.items, c.condPago, c.plazo, c.validez, c.garantia, c.obs, +c.descuento || 0,
   { ...c.despacho, calc: undefined }]);
 async function guardarCotizacion(opciones = {}) {
   if (!validar()) return null;
@@ -1136,6 +1346,7 @@ function htmlCotizacion(c) {
       <div class="cot-card">
         <h5>Cliente</h5>
         <div class="cot-cliente">${esc(cl.nombre)}</div>
+        ${fila('ID cotización', esc(c.idExterno))}
         ${fila('RUT', esc(cl.rut))}
         ${fila('Atención', esc(cl.contacto))}
         ${fila('Teléfono', esc(cl.telefono))}
@@ -1160,6 +1371,7 @@ function htmlCotizacion(c) {
       <tbody>${filas}${filaDesp}</tbody>
     </table>
 
+    ${t.lineas.some(l => l.it.imagen) ? '<p class="cot-ref">Imágenes referenciales: son solo una guía del diseño final.</p>' : ''}
     <section class="cot-bottom">
       <div class="cot-notas">
         ${c.obs ? `<div class="cot-nota">${br(textoCliente(c.obs))}</div>` : ''}
@@ -1293,6 +1505,7 @@ function htmlOt(o) {
     </section>
     <div class="ot-resumen">${items.length} producto${items.length === 1 ? '' : 's'} · <b>${unidades} unidad${unidades === 1 ? '' : 'es'}</b></div>
     <section class="ot-items">${filas}</section>
+    ${items.some(i => i.imagen) ? '<p class="ot-ref">Imágenes referenciales</p>' : ''}
     <section class="ot-pie">
       <div class="ot-obs"><h5>Observaciones del taller</h5>${o.obsTaller ? `<p>${esc(o.obsTaller).replace(/\n/g, '<br>')}</p>` : '<div class="lineas"></div>'}</div>
     </section>
@@ -1417,7 +1630,7 @@ async function accionCot(a, id) {
     if (!ot) {
       ot = { id: uid(), numero: null, fecha: hoy(), cotId: c.id, cotNumero: c.numero, cotDoc: numDoc(c),
         cliente: { ...c.cliente }, plazo: c.plazo, obs: c.obs,
-        entrega: esNumero(c.plazo) ? sumarDiasHabiles(hoy(), +c.plazo) : '', oc: '', idInterno: '', obsTaller: '',
+        entrega: esNumero(c.plazo) ? sumarDiasHabiles(hoy(), +c.plazo) : '', oc: '', idInterno: c.idExterno || '', obsTaller: '',
         envio: { modo: c.despacho?.modo || '', destino: c.despacho?.calc?.destino || '',
           cajas: (c.despacho?.calc?.cajas || []).map(x => `${x.n} × ${x.nombre}`).join(' + ') },
         despacho: [c.despacho.nota, [c.cliente.direccion, c.cliente.comuna, c.cliente.region].filter(Boolean).join(', ')].filter(Boolean).join(' — '),
