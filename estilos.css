@@ -642,3 +642,13 @@ table.comp td.arg .est{color:#8a6814}
 .cd-top{display:flex;gap:8px;align-items:baseline}.cd-top .v{margin-left:auto}
 .caja-tot{text-align:right;font-size:14px;padding:2px 12px}
 .hint.como{margin:4px 0 8px;font-size:12px}
+
+/* Vista previa editable */
+#vistaDoc .ed{outline:none;border-radius:3px;padding:0 2px;margin:0 -2px;cursor:text;transition:background .15s,box-shadow .15s;white-space:pre-wrap;min-width:20px;display:inline-block}
+#vistaDoc .ed:hover{background:rgba(176,137,48,.10);box-shadow:0 0 0 1px rgba(176,137,48,.35)}
+#vistaDoc .ed:focus{background:#fffbe9;box-shadow:0 0 0 2px #b08930}
+#vistaDoc .ed:empty::before{content:attr(data-ph);color:#b9a77d;font-weight:500;font-style:italic}
+#vistaDoc .ed.multi{display:block}
+#vistaDoc .det .ed:empty::before{font-size:inherit}
+#vistaDoc .cot-nota:has(.ed:empty){background:none;border-left-style:dashed;font-weight:500}
+.vista-barra .hint-ed{font-size:12px;color:var(--muted);margin-left:10px;font-weight:500}

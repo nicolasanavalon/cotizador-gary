@@ -1556,10 +1556,12 @@ function textoCliente(s) {
   }
   return s;
 }
-function htmlCotizacion(c) {
+/* ed = true: vista previa editable (se pincha el texto y se cambia; se guarda en la cotización). */
+function htmlCotizacion(c, ed = false) {
   const t = calcTotales(c);
   const cl = c.cliente || {};
   const br = s => esc(s).replace(/\n/g, '<br>');
+  const E = (ruta, val, ph, multi) => `<span class="ed${multi ? ' multi' : ''}" contenteditable="plaintext-only" spellcheck="false" data-e="${ruta}" data-ph="${esc(ph)}">${esc(val || '')}</span>`;
   const medidaDoc = m => esc(String(m || '').replace(/\s*x\s*/i, ' × '));
   const filas = t.lineas.map((l, i) => {
     const it = normalizarItem(l.it), titulo = it.titulo || tituloAuto(it);
@@ -1567,7 +1569,9 @@ function htmlCotizacion(c) {
       <td class="n">${i + 1}</td>
       <td class="desc con-img">${imgDe(it.imagen) ? `<img class="fondo" src="${imgDe(it.imagen)}" alt="">`
         : `<div class="fondo vacio">${ICONO_BANDERA}<span>Sin imagen</span></div>`}
-        <div class="txt"><div class="tit">${esc(titulo)}</div>${it.obs ? `<div class="det">${br(textoCliente(it.obs))}</div>` : ''}</div></td>
+        <div class="txt">${ed ? `<div class="tit">${E('item:' + it.id + ':titulo', titulo, 'Nombre del producto')}</div>
+          <div class="det">${E('item:' + it.id + ':obs', it.obs, '+ descripción', true)}</div>`
+          : `<div class="tit">${esc(titulo)}</div>${it.obs ? `<div class="det">${br(textoCliente(it.obs))}</div>` : ''}`}</div></td>
       <td class="c">${medidaDoc(medidaEf(it))}</td>
       <td class="c">${l.k.cant}</td>
       <td class="m">${clp(l.precioDoc)}</td>
@@ -1584,11 +1588,11 @@ function htmlCotizacion(c) {
   const textoDesp = d.modo === 'retiro' ? 'Retiro en nuestro taller (Viña del Mar)'
     : d.modo === 'sucursal' ? 'Gratis · retiro en sucursal Correos de Chile'
     : d.modo === 'domicilio' ? 'Gratis · a domicilio' : 'Gratis';
-  const plazo = esNumero(c.plazo)
-    ? `${+c.plazo} días hábiles <span class="sub">(aprox. ${fechaCL(sumarDiasHabiles(c.fecha, +c.plazo))})</span>` : esc(c.plazo || '');
-  const validez = esNumero(c.validez)
-    ? `${+c.validez} días hábiles <span class="sub">(hasta ${fechaCL(sumarDiasHabiles(c.fecha, +c.validez))})</span>` : esc(c.validez || '');
+  // en el documento solo los días hábiles (la fecha calculada se ve en el editor)
+  const plazo = esNumero(c.plazo) ? `${+c.plazo} días hábiles` : esc(c.plazo || '');
+  const validez = esNumero(c.validez) ? `${+c.validez} días hábiles` : esc(c.validez || '');
   const fila = (k, v) => v ? `<div class="kv"><span>${k}</span><b>${v}</b></div>` : '';
+  const filaE = (k, ruta, val, ph) => ed ? `<div class="kv"><span>${k}</span><b>${E(ruta, val, ph || '+ agregar')}</b></div>` : fila(k, esc(val));
   const contactos = String(CFG.contactos || '').split('\n').map(s => s.trim()).filter(Boolean);
   const num = c.numero ? numDoc(c) : '<span class="borrador">borrador</span>';
   return `<div class="cot">
@@ -1606,20 +1610,21 @@ function htmlCotizacion(c) {
     <section class="cot-info">
       <div class="cot-card">
         <h5>Cliente</h5>
-        <div class="cot-cliente">${esc(cl.nombre)}</div>
-        ${fila('ID cotización', esc(c.idExterno))}
-        ${fila('RUT', esc(cl.rut))}
-        ${fila('Atención', esc(cl.contacto))}
-        ${fila('Teléfono', esc(cl.telefono))}
-        ${fila('Email', esc(cl.email))}
-        ${fila('Dirección', esc([cl.direccion, cl.comuna, cl.region ? 'Región ' + cl.region : ''].filter(Boolean).join(', ')))}
+        <div class="cot-cliente">${ed ? E('cliente.nombre', cl.nombre, 'Nombre o razón social') : esc(cl.nombre)}</div>
+        ${filaE('ID cotización', 'idExterno', c.idExterno)}
+        ${filaE('RUT', 'cliente.rut', cl.rut)}
+        ${filaE('Atención', 'cliente.contacto', cl.contacto)}
+        ${filaE('Teléfono', 'cliente.telefono', cl.telefono)}
+        ${filaE('Email', 'cliente.email', cl.email)}
+        ${ed ? filaE('Dirección', 'cliente.direccion', cl.direccion) + filaE('Comuna', 'cliente.comuna', cl.comuna) + fila('Región', esc(cl.region || '—'))
+          : fila('Dirección', esc([cl.direccion, cl.comuna, cl.region ? 'Región ' + cl.region : ''].filter(Boolean).join(', ')))}
       </div>
       <div class="cot-card">
         <h5>Condiciones comerciales</h5>
         ${fila('Condición de pago', esc(c.condPago))}
         ${fila('Plazo de entrega', plazo)}
         ${fila('Validez de la oferta', validez)}
-        ${fila('Garantía de confección', esc(c.garantia))}
+        ${filaE('Garantía de confección', 'garantia', c.garantia)}
         ${fila('Despacho', esc(textoDesp))}
       </div>
     </section>
@@ -1632,10 +1637,11 @@ function htmlCotizacion(c) {
       <tbody>${filas}${filaDesp}</tbody>
     </table>
 
-    ${t.lineas.some(l => l.it.imagen) ? '<p class="cot-ref">Imágenes referenciales: son solo una guía del diseño final.</p>' : ''}
+    ${t.lineas.some(l => l.it.imagen) ? '<p class="cot-ref">Imágenes referenciales.</p>' : ''}
     <section class="cot-bottom">
       <div class="cot-notas">
-        ${c.obs ? `<div class="cot-nota">${br(textoCliente(c.obs))}</div>` : ''}
+        ${ed ? `<div class="cot-nota">${E('obs', c.obs, '+ nota destacada al pie (opcional)', true)}</div>`
+          : c.obs ? `<div class="cot-nota">${br(textoCliente(c.obs))}</div>` : ''}
         ${d.modo !== 'retiro' ? `<div class="cot-gratis">${ICONO_CAMION}<span><b>Despacho gratis</b>${d.modo === 'sucursal' ? ' · retiro en sucursal Correos' : ' a domicilio'}</span></div>` : ''}
         <p class="cot-acepta">Para aceptar esta cotización, responda este correo o envíe su orden de compra indicando el N° ${c.numero ? numDoc(c) : 'de cotización'}.</p>
       </div>
@@ -1689,7 +1695,8 @@ async function verCotizacion() {
   c.items = c.items.filter(i => +i.cantidad > 0 && calcItem(i).precioU);
   if (!c.items.length) { toast('Agrega al menos un producto con costo para ver la cotización'); return; }
   if (!c.numero) c.fecha = hoy();
-  $('#vistaDoc').innerHTML = htmlCotizacion(c);
+  $('#vistaDoc').innerHTML = htmlCotizacion(c, true);
+  VISTA_EDITADA = false;
   $('#dlgVista').showModal();
   ajustarVista();
   $('.vista-papel').scrollTop = 0;
@@ -1704,6 +1711,28 @@ function ajustarVista() {
 window.addEventListener('resize', () => { if ($('#dlgVista').open) ajustarVista(); });
 $$('[data-ver]').forEach(b => b.onclick = verCotizacion);
 $('#btnVistaCerrar').onclick = () => $('#dlgVista').close();
+/* Lo que se edita en la vista previa queda en la cotización (y en el formulario). */
+let VISTA_EDITADA = false;
+$('#vistaDoc').addEventListener('input', e => {
+  const el = e.target.closest('[data-e]'); if (!el) return;
+  const ruta = el.dataset.e, v = el.innerText.replace(/\u00a0/g, ' ').replace(/\n+$/, '');
+  const multi = el.classList.contains('multi'), val = multi ? v : v.replace(/\n/g, ' ');
+  if (ruta.startsWith('item:')) {
+    const [, id, campo] = ruta.split(':'), it = D.items.find(x => x.id === id);
+    if (it) { it[campo] = campo === 'titulo' ? val.trim() : val; if (campo === 'titulo') it._tituloAuto = null; }
+  } else if (ruta.startsWith('cliente.')) D.cliente[ruta.slice(8)] = val.trim();
+  else D[ruta] = multi ? val : val.trim();
+  VISTA_EDITADA = true; saveDraft();
+});
+$('#vistaDoc').addEventListener('keydown', e => {
+  const el = e.target.closest('[data-e]');
+  if (el && e.key === 'Enter' && !el.classList.contains('multi')) { e.preventDefault(); el.blur(); }
+});
+$('#vistaDoc').addEventListener('focusout', e => {
+  const el = e.target.closest('[data-e="cliente.rut"]');
+  if (el && D.cliente.rut) { D.cliente.rut = formatRut(D.cliente.rut); el.textContent = D.cliente.rut; }
+});
+$('#dlgVista').addEventListener('close', () => { if (VISTA_EDITADA) { renderEditor(); VISTA_EDITADA = false; } });
 const otEntrega = o => o.entrega || (esNumero(o.plazo) ? sumarDiasHabiles(o.fecha, +o.plazo) : '');
 const caja = v => `<span class="box ${v ? 'on' : ''}">${v ? '✓' : ''}</span>`;
 function htmlOt(o) {
