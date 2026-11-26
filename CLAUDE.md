@@ -110,7 +110,9 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - **Panel** (KPI): cotizado, vendido, tasa de aprobación (cantidad y monto), margen de lo vendido, venta promedio,
   días para aprobar, en carpeta, por cobrar/vencido; gráficos por mes, embudo, mejores clientes, qué se vende,
   requiere atención, producción, motivos de rechazo y cobranza. Filtro: este mes / 3 meses / año / todo.
-- **Datos de ejemplo**: cotizaciones E1–E11 y OT E101… marcadas `demo: true`, sin usar la numeración real.
+- Tabla de cotizaciones: ID, fecha, cliente, **ID MP** (Mercado Público), neto, margen $, margen %, estado, siguiente paso y acciones (sin total bruto). Tabla de OT: **OT** (número), **ID** (de la cotización), fecha, entrega, cliente, productos, estado. Las listas y el panel usan todo el ancho.
+- Los archivos JS/CSS llevan `?v=` en index.html: **cambiar la versión en cada publicación** para que los navegadores no usen la copia vieja.
+- **Datos de ejemplo**: cotizaciones E1–E11 y OT 543–548 marcadas `demo: true`, sin usar la numeración real.
   Se borran en Configuración → "Borrar datos de ejemplo".
 
 ## Otros

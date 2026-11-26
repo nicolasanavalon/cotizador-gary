@@ -744,3 +744,14 @@ tr.atrasada td{background:#fff7f5}
 .kpi span b{font-size:inherit;color:inherit;letter-spacing:0}
 @media(min-width:1000px){#panelCuerpo>.kpis{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.kpi{padding:10px 12px}}
+
+/* listas y panel a todo el ancho */
+body[data-vista="cotizaciones"] main,body[data-vista="ots"] main,body[data-vista="facturas"] main,body[data-vista="panel"] main{max-width:1760px;padding-left:24px;padding-right:24px}
+#tablaCot td:nth-child(7),#tablaCot td:nth-child(4){white-space:nowrap}
+#tablaOt td:nth-child(3),#tablaOt td:nth-child(4){white-space:nowrap}
+#tablaCot td:nth-child(3){min-width:210px}
+#tablaCot td.acc,#tablaOt td.acc,#tablaFact td.acc{white-space:nowrap;width:1%}
+#tablaCot .paso-cel{width:1%}
+#tablaCot th,#tablaCot td{padding-left:8px;padding-right:8px;font-size:13.5px}
+#tablaCot .btn.sm{padding:4px 9px}
+#tablaCot td:first-child .badge{display:block;width:max-content;margin-top:2px}

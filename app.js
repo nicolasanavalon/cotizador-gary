@@ -842,6 +842,7 @@ function descItem(it) {
 
 /* ---------------- Navegación ---------------- */
 function mostrar(view) {
+  document.body.dataset.vista = view;   // las listas y el panel usan todo el ancho de la pantalla
   $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   if (view === 'cotizaciones') renderCotizaciones();
@@ -2097,14 +2098,15 @@ function renderCotizaciones() {
   const rows = conEstado.filter(({ c, e }) => (!FILTRO_COT || e === FILTRO_COT) &&
     (!q || String(c.numero).toLowerCase().includes(q) || (c.cliente.nombre || '').toLowerCase().includes(q)));
   if (!rows.length) { $('#tablaCot').innerHTML = `<tr><td class="empty">${COTS.length ? 'Sin resultados.' : 'Aún no hay cotizaciones guardadas.'}</td></tr>`; return; }
-  $('#tablaCot').innerHTML = `<thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th class="num">Neto</th><th class="num">Total bruto</th><th class="num">Margen</th><th>Estado</th><th>Siguiente paso</th><th></th></tr></thead><tbody>` +
+  $('#tablaCot').innerHTML = `<thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>ID MP</th><th class="num">Neto</th><th class="num">Margen $</th><th class="num">Margen %</th><th>Estado</th><th>Siguiente paso</th><th></th></tr></thead><tbody>` +
     rows.map(({ c, e }) => { const t = c.totales || {}; const ot = OTS.find(o => o.cotId === c.id); const fe = estadoFactura(c);
       const paso = e === 'Borrador' ? '<button class="btn sm" data-a="enviada">✉ Marcar enviada</button>'
         : e === 'Enviada' || e === 'Vencida' ? '<button class="btn sm ok" data-a="aprobar">✓ Aprobar</button> <button class="btn sm ghost" data-a="rechazar">Rechazar</button>'
-        : e === 'Aprobada' ? `${ot ? `<span class="paso">OT ${esc(ot.numero)} · ${esc(ot.estado)}</span>` : ''} <a href="#" class="paso-fact ${fe.clase}" data-a="facturacion">${esc(fe.texto)}</a>`
+        : e === 'Aprobada' ? `${ot ? `<span class="paso">OT ${esc(ot.numero)} · ${esc(ot.estado)}</span><br>` : ''}<a href="#" class="paso-fact ${fe.clase}" data-a="facturacion">${esc(fe.texto)}</a>`
         : `<small class="muted">${esc(c.motivoRechazo || '')}</small>`;
       return `<tr data-id="${c.id}"><td><b>${esc(numDoc(c))}</b>${c.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${fechaCL(c.fecha)}</td><td>${esc(c.cliente.nombre)}</td>
-      <td class="num">${clp(t.neto)}</td><td class="num">${clp(t.bruto)}</td><td class="num">${clp(t.margen)} · ${pct(t.margenPct)}</td>
+      <td><small>${esc(c.idExterno || '—')}</small></td>
+      <td class="num">${clp(t.neto)}</td><td class="num">${clp(t.margen)}</td><td class="num"><b>${pct(t.margenPct)}</b></td>
       <td><span class="badge ${e}">${e}</span>${e === 'Enviada' && c.fechaEnvio ? `<br><small class="muted">enviada ${fechaCL(c.fechaEnvio)}</small>` : ''}</td>
       <td class="paso-cel">${paso}</td>
       <td class="acc">
@@ -2186,9 +2188,8 @@ function otDesdeCot(c, fecha) {
 const ESTADOS_OT = ['Pendiente', 'En producción', 'Terminada', 'Despachada', 'Entregada'];
 function renderOts() {
   if (!OTS.length) { $('#tablaOt').innerHTML = '<tr><td class="empty">Aún no hay OTs. Se crean solas al aprobar una cotización.</td></tr>'; return; }
-  $('#tablaOt').innerHTML = `<thead><tr><th>OT</th><th>Fecha</th><th>Entrega</th><th>Cliente</th><th>Cotización</th><th>Productos</th><th>Estado</th><th></th></tr></thead><tbody>` +
-    OTS.map(o => `<tr data-id="${o.id}" class="${otAtrasada(o) ? 'atrasada' : ''}"><td><b>${esc(o.numero)}</b>${o.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${fechaCL(o.fecha)}</td><td><b>${otEntrega(o) ? fechaCL(otEntrega(o)) : '—'}</b>${otAtrasada(o) ? '<br><small class="atraso">atrasada</small>' : ''}</td><td>${esc(o.cliente.nombre)}</td>
-      <td>N° ${esc(o.cotDoc || o.cotNumero)}</td><td>${o.items.reduce((s, i) => s + (+i.cantidad || 0), 0)} u.</td>
+  $('#tablaOt').innerHTML = `<thead><tr><th>OT</th><th>ID</th><th>Fecha</th><th>Entrega</th><th>Cliente</th><th>Productos</th><th>Estado</th><th></th></tr></thead><tbody>` +
+    OTS.map(o => `<tr data-id="${o.id}" class="${otAtrasada(o) ? 'atrasada' : ''}"><td><b>${esc(o.numero)}</b>${o.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${esc(o.cotDoc || o.cotNumero || '')}</td><td>${fechaCL(o.fecha)}</td><td><b>${otEntrega(o) ? fechaCL(otEntrega(o)) : '—'}</b>${otAtrasada(o) ? '<br><small class="atraso">atrasada</small>' : ''}</td><td>${esc(o.cliente.nombre)}</td><td>${o.items.reduce((s, i) => s + (+i.cantidad || 0), 0)} u.</td>
       <td><select data-a="estado">${ESTADOS_OT.map(s => opt(s, o.estado)).join('')}</select></td>
       <td class="acc"><button class="btn sm" data-a="abrir">Abrir</button> <button class="btn sm" data-a="pdf">Imprimir / PDF</button>
         <button class="btn sm ghost danger" data-a="borrar">Borrar</button></td></tr>`).join('') + '</tbody>';
