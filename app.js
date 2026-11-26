@@ -715,6 +715,8 @@ function precioUnitario(costo, margenPct) {
   return Math.ceil(costo / (1 - m) / r) * r;   // margen sobre precio de venta
 }
 const esTrad = it => it.metodo === 'tradicional';
+const esManual = it => it.metodo === 'manual';     // costo escrito a mano (productos comprados terminados, banderas importadas…)
+const esMatriz = it => !esTrad(it) && !esManual(it);
 function calcItem(it) {
   const costoU = +it.costo || 0, cant = +it.cantidad || 0;
   const precioU = precioUnitario(costoU, +it.margen || 0);   // margen sobre la venta en ambos métodos
@@ -1014,8 +1016,11 @@ function renderItems() {
       <div class="item-precio">
         <label>Cantidad<input type="number" min="0" data-f="cantidad" value="${esc(it.cantidad)}"></label>
         <label>Costo unit. neto
-          <span class="metodo" role="group"><button type="button" class="${esTrad(it) ? '' : 'on'}" data-metodo="matriz">Matriz</button><button type="button" class="${esTrad(it) ? 'on' : ''}" data-metodo="tradicional">Tradicional</button></span>
-          ${esTrad(it)
+          <span class="metodo" role="group"><button type="button" class="${esMatriz(it) ? 'on' : ''}" data-metodo="matriz">Matriz</button><button type="button" class="${esTrad(it) ? 'on' : ''}" data-metodo="tradicional">Tradicional</button><button type="button" class="${esManual(it) ? 'on' : ''}" data-metodo="manual">A mano</button></span>
+          ${esManual(it)
+            ? `<span class="costo-mano"><span>$</span><input data-money data-f="costo" inputmode="numeric" value="${miles(it.costo)}" placeholder="Escribe el costo"></span>
+               <small class="nota">costo unitario escrito a mano (ej. producto comprado terminado)</small>`
+            : esTrad(it)
             ? `<button type="button" class="costo-btn trad" data-act="trad" title="Costeo tradicional (como el Excel)">${+it.costo ? `<b>${clp(it.costo)}</b><span>costeo ▸</span>` : '<b class="vacio">Costear</b><span>abrir ▸</span>'}</button>
                <small class="nota">${+it.costo ? 'costeo tradicional (Excel)' : 'pincha para calcular como en el Excel'}</small>`
             : `<button type="button" class="costo-btn" data-act="desglose" title="Ver y editar el desglose"><b>${clp(it.costo)}</b><span>desglose ▸</span></button><small class="nota">${notaCosto}</small>`}</label>
@@ -1348,19 +1353,22 @@ $('#items').addEventListener('change', e => {
   if (f === 'vaina') { it.vaina = e.target.value; saveDraft(); return; }
   if (f === 'medidaOtra') {
     it.medidaOtra = normMedida(e.target.value); recosteoTrad(it);
-    const cm = costoMatriz(it); if (cm != null && !esTrad(it)) { it.costo = cm; it.costoManual = false; it.desglose = null; }
+    const cm = costoMatriz(it); if (cm != null && esMatriz(it)) { it.costo = cm; it.costoManual = false; it.desglose = null; }
     renderItems(); return;
   }
   if (!CAMPOS_DEF.includes(f)) return;
   it[f] = e.target.value;
-  if (f === 'producto') { if (!esBandera(it)) it.tipo = ''; actualizarTituloAuto(it); }
+  if (f === 'producto') {
+    if (!esBandera(it)) { it.tipo = ''; if (esTrad(it) && !it.trad) it.metodo = 'manual'; }
+    actualizarTituloAuto(it);
+  }
   if (f === 'tipo') {
     if (!it.material) it.material = compTelas().find(t => +t.precio > 0)?.nombre || '';   // por defecto la tela con precio (Bistrech)
     actualizarTituloAuto(it);
   }
   if (f === 'medida' && it.medida !== 'Otra') recosteoTrad(it);
   const cm = costoMatriz(it);
-  if (cm != null && !esTrad(it)) { it.costo = cm; it.costoManual = false; it.desglose = null; }
+  if (cm != null && esMatriz(it)) { it.costo = cm; it.costoManual = false; it.desglose = null; }
   renderItems();
 });
 function recosteoTrad(it) {
@@ -1399,6 +1407,7 @@ $('#items').addEventListener('click', e => {
   if (met && met !== (it.metodo || 'matriz')) {
     it.metodo = met;
     if (met === 'tradicional') { it.costo = it.trad ? Math.round(calcTrad(it.trad).total) : 0; }
+    else if (met === 'manual') { it.costoManual = true; it.desglose = null; }   // parte con el costo que tenía
     else { const cm = costoMatriz(it); it.costo = cm ?? 0; it.costoManual = false; it.desglose = null; }
     renderItems(); return;
   }
@@ -1536,6 +1545,202 @@ function bloqueCliente(c) {
     <div><span>Teléfono / email:</span> ${esc([c.telefono, c.email].filter(Boolean).join(' · '))}</div>
     <div style="grid-column:1/-1"><span>Dirección de despacho:</span> ${esc([c.direccion, c.comuna, c.region ? 'Región ' + c.region : ''].filter(Boolean).join(', '))}</div>
   </div>`;
+}
+/* ---------- Cuadro de costos en Excel: una columna por producto (como el Excel del taller) ---------- */
+const EXCELJS = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+const XLS_FILAS = [['tela', 'Tela'], ['crea', 'Crea'], ['extra', 'Extra tela'], ['vaina', 'Vaina'], ['huincha', 'Huincha'],
+  ['argollas', 'Argollas'], ['armado', 'Armado'], ['cortado', 'Cortado'], ['feston', 'Festón'], ['limpieza', 'Limpieza'],
+  ['embolsado', 'Embolsado'], ['sublimado', 'Sublimado'], ['varios', 'Varios'], ['ajuste', 'Ajuste manual'], ['mano', 'Costo a mano']];
+function colXls(n) { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; }
+/* Qué tiene cada producto en cada fila: { k: { cant, costo, total, f, pct } } */
+function filasCostoXls(it) {
+  const out = {};
+  if (esTrad(it) && it.trad) {
+    const t = it.trad, c = calcTrad(t);
+    for (const [k, , tipo] of TRAD_FILAS) {
+      const pct = tipo === 'pct';
+      out[k] = { cant: +t[k].cant || 0, costo: pct ? +t.armado.costo || 0 : +t[k].costo || 0, total: c.pu[k], f: pct ? null : t[k].f, pct };
+    }
+    out._trad = { flete: +t.flete || 0, finan: +t.finan || 0, imprev: +t.imprev || 0, c };
+  } else if (esMatriz(it) && desgloseMatriz(it)) {
+    const dm = desgloseMatriz(it), vals = it.desglose || null;
+    let suma = 0;
+    for (const [k, fi] of Object.entries(dm.filas)) {
+      const v = Math.round(vals && vals[k] != null ? +vals[k] : +fi.v || 0); suma += v;
+      if (v) out[k] = { total: v, cant: k === 'argollas' ? cantidadArgollas(medidaEf(it)).n : null };
+    }
+    const aj = Math.round(+it.costo || 0) - suma; if (aj) out.ajuste = { total: aj };
+  } else out.mano = { total: Math.round(+it.costo || 0) };
+  return out;
+}
+async function descargarCostosExcel() {
+  const items = D.items.filter(it => +it.cantidad > 0 || +it.costo > 0);
+  if (!items.length) { toast('No hay productos para exportar'); return; }
+  toast('Armando el Excel…');
+  let ExcelJS;
+  try { ExcelJS = await cargarScript(EXCELJS, 'ExcelJS'); } catch (e) { toast('No se pudo generar el Excel (' + e.message + ')'); return; }
+  const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Costos', { views: [{ state: 'frozen', xSplit: 1, ySplit: 5 }] });
+  const datos = items.map(it => ({ it, f: filasCostoXls(it), k: calcItem(it) }));
+  const usadas = XLS_FILAS.filter(([k]) => datos.some(x => x.f[k]));
+  const hayTrad = datos.some(x => x.f._trad);
+  const DINERO = '"$"#,##0', CANT = '#,##0.00', PCT = '0%';
+  const oro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB08930' } }, crema = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7EFDD' } };
+  const gris = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }, negro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D1D1F' } };
+  const borde = { top: { style: 'thin', color: { argb: 'FFDDDDDD' } }, bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } }, left: { style: 'thin', color: { argb: 'FFDDDDDD' } }, right: { style: 'thin', color: { argb: 'FFDDDDDD' } } };
+  ws.getColumn(1).width = 26;
+  const c0 = j => 1 + j * 3;                     // columna "Cant." del producto j (0-based → A=0)
+  const celda = (fila, col) => ws.getCell(fila, col + 1);
+  const ref = (fila, col) => colXls(col) + fila;
+  // encabezado
+  ws.getCell('A1').value = `Costos · Cotización N° ${D.numero ? numDoc(D) : 'borrador'} · ${D.cliente?.nombre || ''}`;
+  ws.getCell('A1').font = { bold: true, size: 14 };
+  ws.getCell('A2').value = `Fecha ${fechaCL(D.fecha || hoy())} · Banderas Gary`; ws.getCell('A2').font = { color: { argb: 'FF777777' } };
+  ws.getCell('A5').value = 'Concepto';
+  datos.forEach(({ it }, j) => {
+    const c = c0(j);
+    ws.mergeCells(3, c + 1, 3, c + 3); ws.mergeCells(4, c + 1, 4, c + 3);
+    celda(3, c).value = (it.titulo || tituloAuto(it) || productoEf(it) || 'Producto ' + (j + 1));
+    celda(4, c).value = [medidaEf(it), esBandera(it) ? it.tipo : productoEf(it), esTrad(it) ? 'Tradicional' : esManual(it) ? 'Costo a mano' : 'Matriz'].filter(Boolean).join(' · ');
+    celda(3, c).font = { bold: true, color: { argb: 'FFFFFFFF' } }; celda(3, c).fill = oro; celda(3, c).alignment = { horizontal: 'center', wrapText: true };
+    celda(4, c).font = { size: 9, color: { argb: 'FF555555' } }; celda(4, c).alignment = { horizontal: 'center', wrapText: true };
+    ['Cant.', 'Costo', 'Total'].forEach((h, i) => { const x = celda(5, c + i); x.value = h; });
+    ws.getColumn(c + 1).width = 9; ws.getColumn(c + 2).width = 11; ws.getColumn(c + 3).width = 13;
+  });
+  const nCols = c0(datos.length);                // columna TOTAL general
+  celda(3, nCols).value = 'TOTAL'; celda(3, nCols).fill = negro; celda(3, nCols).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  celda(3, nCols).alignment = { horizontal: 'center' }; ws.getColumn(nCols + 1).width = 15;
+  ws.getRow(3).height = 30;
+  ws.getRow(5).eachCell(x => { x.font = { bold: true, color: { argb: 'FFFFFFFF' } }; x.fill = negro; x.alignment = { horizontal: 'center' }; });
+  // filas de componentes
+  let r = 6; const filaDe = {};
+  for (const [k, lbl] of usadas) {
+    filaDe[k] = r; ws.getCell(r, 1).value = lbl; r++;
+  }
+  const r0 = 6, r1 = r - 1;
+  const conv = (expr, j, ctxFila) => {   // fórmula del cuadro → fórmula Excel
+    let e = String(expr).trim().replace(/^=/, '').replace(/\s+/g, '').replace(/(\d),(\d)/g, '$1.$2').replace(/×/g, '*').replace(/([\d)])x(?=[\d(])/gi, '$1*').replace(/÷/g, '/');
+    let ok = true;
+    e = e.replace(/[a-záéíóúñ_]+/gi, w => { const k = normTxt(w).replace('extratela', 'extra'); if (filaDe[k]) return ref(filaDe[k], c0(j)); ok = false; return w; });
+    return ok && /^[A-Z0-9.+\-*/()]+$/.test(e) ? e : null;
+  };
+  datos.forEach(({ f }, j) => {
+    const c = c0(j);
+    for (const [k] of usadas) {
+      const v = f[k]; if (!v) continue; const fila = filaDe[k];
+      if (f._trad) {
+        const cc = celda(fila, c), ck = celda(fila, c + 1), ct = celda(fila, c + 2);
+        const fx = v.f ? conv(v.f, j) : null;
+        cc.value = fx ? { formula: fx, result: v.cant } : v.cant; cc.numFmt = v.pct ? PCT : CANT;
+        ck.value = v.pct ? { formula: ref(filaDe.armado, c + 1), result: v.costo } : v.costo; ck.numFmt = DINERO;
+        ct.value = { formula: `${ref(fila, c)}*${ref(fila, c + 1)}`, result: v.total }; ct.numFmt = DINERO;
+      } else {
+        if (v.cant != null) { celda(fila, c).value = v.cant; celda(fila, c).numFmt = CANT; }
+        celda(fila, c + 2).value = v.total; celda(fila, c + 2).numFmt = DINERO;
+      }
+    }
+  });
+  // subtotales y costo unitario
+  const filaTot = (lbl, estilo) => { const fila = r++; ws.getCell(fila, 1).value = lbl; ws.getRow(fila).font = { bold: !!estilo }; if (estilo) for (let cc = 0; cc <= nCols; cc++) celda(fila, cc).fill = estilo; return fila; };
+  const fA = filaTot('Subtotal A', gris);
+  let fFl, fFi, fIm, fB;
+  if (hayTrad) { fFl = filaTot('Flete'); fFi = filaTot('Costo financiero'); fIm = filaTot('Imprevisto'); fB = filaTot('Subtotal B', gris); }
+  const fCU = filaTot(hayTrad ? 'COSTO UNITARIO (A + B)' : 'COSTO UNITARIO', crema);
+  r++;
+  const fM = filaTot('Margen sobre la venta'), fP = filaTot('Precio neto unitario', crema), fMU = filaTot('Margen unitario');
+  const fQ = filaTot('Cantidad'), fTN = filaTot('Total neto', crema), fCT = filaTot('Costo total'), fMT = filaTot('Margen total', crema);
+  const red = Math.max(1, +CFG.redondeo || 1);
+  datos.forEach(({ it, f, k }, j) => {
+    const t = c0(j) + 2, T = fila => ref(fila, t);
+    const sub = f._trad ? f._trad.c.subA : r1 >= r0 ? usadas.reduce((s, [kk]) => s + (f[kk]?.total || 0), 0) : 0;
+    celda(fA, t).value = r1 >= r0 ? { formula: `SUM(${T(r0)}:${T(r1)})`, result: sub } : 0;
+    if (f._trad) {
+      const tr = f._trad, c = c0(j);
+      [[fFl, tr.flete, tr.c.flete], [fFi, tr.finan, tr.c.finan], [fIm, tr.imprev, tr.c.imprev]].forEach(([fila, p, v]) => {
+        celda(fila, c).value = p; celda(fila, c).numFmt = PCT;
+        celda(fila, t).value = { formula: `${ref(fila, c)}*${T(fA)}`, result: v };
+      });
+      celda(fB, t).value = { formula: `SUM(${T(fFl)}:${T(fIm)})`, result: tr.c.subB };
+      celda(fCU, t).value = { formula: `${T(fA)}+${T(fB)}`, result: tr.c.total };
+    } else celda(fCU, t).value = { formula: T(fA), result: sub };
+    const cu = `ROUND(${T(fCU)},0)`;
+    celda(fM, t).value = (+it.margen || 0) / 100; celda(fM, t).numFmt = PCT;
+    celda(fP, t).value = { formula: `IF(${T(fCU)}>0,CEILING(${cu}/(1-${T(fM)}),${red}),0)`, result: k.precioU };
+    celda(fMU, t).value = { formula: `${T(fP)}-${cu}`, result: k.precioU - k.costoU };
+    celda(fQ, t).value = k.cant; celda(fQ, t).numFmt = '#,##0';
+    celda(fTN, t).value = { formula: `${T(fP)}*${T(fQ)}`, result: k.venta };
+    celda(fCT, t).value = { formula: `${cu}*${T(fQ)}`, result: k.costo };
+    celda(fMT, t).value = { formula: `${T(fTN)}-${T(fCT)}`, result: k.margen };
+    for (const fila of [fA, fFl, fFi, fIm, fB, fCU, fP, fMU, fTN, fCT, fMT]) if (fila) celda(fila, t).numFmt = DINERO;
+  });
+  // columna TOTAL: suma de todos los productos
+  const sumaFila = (fila, v) => { celda(fila, nCols).value = { formula: datos.map((_, j) => ref(fila, c0(j) + 2)).join('+'), result: v }; celda(fila, nCols).numFmt = DINERO; };
+  const tot = datos.reduce((a, x) => ({ v: a.v + x.k.venta, c: a.c + x.k.costo }), { v: 0, c: 0 });
+  sumaFila(fTN, tot.v); sumaFila(fCT, tot.c); sumaFila(fMT, tot.v - tot.c);
+  celda(fM, nCols).value = { formula: `IF(${ref(fTN, nCols)}>0,${ref(fMT, nCols)}/${ref(fTN, nCols)},0)`, result: tot.v ? (tot.v - tot.c) / tot.v : 0 }; celda(fM, nCols).numFmt = PCT;
+  for (let fila = 5; fila < r; fila++) for (let cc = 0; cc <= nCols; cc++) { const x = celda(fila, cc); if (fila === fM - 1) continue; x.border = borde; }
+  for (let fila = 3; fila <= 4; fila++) for (let cc = 1; cc <= nCols; cc++) celda(fila, cc).border = borde;
+  ws.getRow(fCU).font = { bold: true, size: 12 };
+  const buf = await wb.xlsx.writeBuffer();
+  const nombre = `Costos cotización ${D.numero ? numDoc(D) : 'borrador'} - ${D.cliente?.nombre || 'cliente'}`.replace(/[\\/:*?"<>|]+/g, '-') + '.xlsx';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = nombre; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.parentNode && a.parentNode.removeChild(a); }, 1500);
+  toast('Excel descargado: ' + nombre);
+}
+$$('[data-costos-xls]').forEach(b => b.onclick = conBoton(b, descargarCostosExcel));
+
+/* ---------- Descargar PDF (sin pasar por imprimir) ---------- */
+const HTML2PDF = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+function cargarScript(url, global) {
+  if (window[global]) return Promise.resolve(window[global]);
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = url;
+    s.onload = () => res(window[global]); s.onerror = () => rej(new Error('sin conexión para generar el archivo'));
+    document.head.appendChild(s);
+  });
+}
+/* html2canvas no entiende la máscara CSS del fondo difuminado: se pinta el difuminado en la imagen misma. */
+async function aplanarFondos(raiz) {
+  for (const img of $$('img.fondo', raiz)) {
+    if (!img.complete) await new Promise(r => { img.onload = img.onerror = r; });
+    const w = img.offsetWidth, h = img.offsetHeight; if (!w || !h || !img.naturalWidth) continue;
+    const k = 2, cv = document.createElement('canvas'); cv.width = w * k; cv.height = h * k;
+    const g = cv.getContext('2d');
+    const z = Math.max(cv.width / img.naturalWidth, cv.height / img.naturalHeight);
+    const dw = img.naturalWidth * z, dh = img.naturalHeight * z;
+    g.drawImage(img, (cv.width - dw) / 2, (cv.height - dh) / 2, dw, dh);
+    g.globalCompositeOperation = 'destination-in';
+    g.save(); g.translate(cv.width, cv.height / 2); g.scale(cv.width, cv.height * 1.2);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+    gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(.35, 'rgba(0,0,0,1)'); gr.addColorStop(.62, 'rgba(0,0,0,.5)'); gr.addColorStop(.92, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(-1, -1, 2, 2); g.restore();
+    await new Promise(r => { img.onload = img.onerror = r; img.src = cv.toDataURL('image/png'); });
+    img.style.webkitMaskImage = 'none'; img.style.maskImage = 'none'; img.style.objectFit = 'fill';
+  }
+}
+async function descargarPdf(html, nombre) {
+  toast('Generando PDF…');
+  let lib;
+  try { lib = await cargarScript(HTML2PDF, 'html2pdf'); }
+  catch (e) { toast('No se pudo generar el PDF (' + e.message + '). Se abre para imprimir.'); return imprimir(html, nombre); }
+  const fuera = document.createElement('div'), hoja = document.createElement('div');
+  fuera.className = 'pdf-fuera'; hoja.className = 'pdf-render';
+  hoja.innerHTML = html; fuera.appendChild(hoja); document.body.appendChild(fuera);
+  try {
+    await Promise.all($$('img', hoja).map(img => img.complete ? null : new Promise(r => { img.onload = img.onerror = r; })));
+    await aplanarFondos(hoja);
+    const archivo = nombre.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim() + '.pdf';
+    await lib().set({
+      margin: [10, 10, 10, 10], filename: archivo,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+      jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.cot-cierre', '.cot-bottom', '.cot-info'] },
+    }).from(hoja).save();
+    toast('PDF descargado: ' + archivo);
+  } catch (e) { toast('No se pudo generar el PDF: ' + e.message); }
+  finally { fuera.parentNode && fuera.parentNode.removeChild(fuera); }
 }
 async function imprimir(html, titulo) {
   $('#print').innerHTML = html;
@@ -1685,7 +1890,7 @@ function htmlCotizacion(c, ed = false) {
 }
 async function imprimirCotizacion(c) {
   await asegurarImagenes(c.items);
-  imprimir(htmlCotizacion(c), `Cotización ${numDoc(c)}${c.version ? ' (actualizada)' : ''} · ${c.cliente.nombre} · Banderas Gary`);
+  await descargarPdf(htmlCotizacion(c), `Cotización ${numDoc(c)}${c.version ? ' (actualizada)' : ''} - ${c.cliente.nombre || 'cliente'} - Banderas Gary`);
 }
 
 /* Vista previa: muestra la cotización tal como la recibe el cliente, sin guardar. */
@@ -1816,7 +2021,7 @@ function htmlOt(o) {
 }
 async function imprimirOt(o) {
   await asegurarImagenes(o.items);
-  imprimir(htmlOt(o), `OT ${o.numero} · ${o.cliente?.nombre || ''}`);
+  await descargarPdf(htmlOt(o), `OT ${o.numero} - ${o.cliente?.nombre || ''}`);
 }
 
 /* ---------------- Editor de OT ---------------- */

@@ -652,3 +652,13 @@ table.comp td.arg .est{color:#8a6814}
 #vistaDoc .det .ed:empty::before{font-size:inherit}
 #vistaDoc .cot-nota:has(.ed:empty){background:none;border-left-style:dashed;font-weight:500}
 .vista-barra .hint-ed{font-size:12px;color:var(--muted);margin-left:10px;font-weight:500}
+
+.costo-mano{display:flex;align-items:center;gap:6px;border:1px solid var(--line,#ddd);border-radius:10px;padding:0 10px;background:#fff;margin-top:6px}
+.costo-mano span{font-weight:700;color:var(--muted)}
+.costo-mano input{border:0;outline:0;padding:9px 0;font-weight:700;font-size:15px;width:100%;background:transparent}
+.costo-mano:focus-within{border-color:#b08930;box-shadow:0 0 0 2px rgba(176,137,48,.2)}
+
+/* hoja oculta donde se arma el PDF descargable (ancho carta menos márgenes) */
+.pdf-fuera{position:fixed;left:-10000px;top:0;z-index:-1}
+.pdf-render{width:740px;background:#fff;color:#1d1d1f}
+.pdf-render .cot{max-width:none;margin:0}

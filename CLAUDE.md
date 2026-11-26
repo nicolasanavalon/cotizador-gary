@@ -50,6 +50,8 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   argollas). Si el producto no tiene medida, se toma la escrita en el nombre/descripción ("1,50 x 1,00",
   "150x100 cm"); si no hay, el cuadro pide la medida (campo "Medida" arriba) y al aplicar pasa al producto.
   Al cambiar la medida del producto, el costeo se recalcula solo (lo editado a mano se respeta).
+- **A mano:** tercer método (botón "A mano"): el costo unitario se escribe directo, sin desglose (productos
+  comprados terminados, banderas importadas). Si el producto no es "Bandera" y no se ha costeado, pasa a "A mano".
 - **Por defecto los productos nuevos usan el método Tradicional** (es el que usa el papá).
 - La tarjeta del producto muestra costo unit., precio unit. neto, **margen unit.**, total neto, costo total y margen.
 
@@ -88,6 +90,11 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - **Vista previa** ("Así la ve el cliente"): se abre **limpia**; con el botón **✎ Editar** (junto a Cerrar) se pincha y edita datos del cliente (nombre, ID,
   RUT, atención, teléfono, email, dirección, comuna), garantía, nombre y descripción de cada producto y
   la nota destacada al pie; se guarda en la cotización y en el formulario. **✓ Listo** vuelve a la vista limpia. El PDF sale sin marcas de edición.
+- **"Guardar y generar PDF" descarga el archivo PDF** (no abre imprimir); igual para la OT. Se genera con
+  html2pdf.js en el navegador; si no carga la librería, se abre imprimir como respaldo.
+- **"Costos en Excel"** (junto a Ver cotización): descarga el cuadro de costos con **una columna por producto**
+  (Cant. / Costo / Total), filas por componente, Subtotal A, flete/financiero/imprevisto, Subtotal B, costo
+  unitario, margen, precio, cantidad y totales, con fórmulas de Excel (como el Excel del papá).
 - OT: sin precios, sin checklist ni firmas; terminación en tipo oración.
 - Validez y plazo de entrega en días hábiles (se descuentan feriados).
 
