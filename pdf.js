@@ -233,6 +233,146 @@ async function imprimirCotizacion(c) {
     toast('PDF descargado: ' + archivo);
   } catch (e) {
     console.error(e);
-    await descargarPdf(htmlCotizacion(c), nombre);
+    toast('No se pudo generar el PDF: ' + e.message);
   }
 }
+
+/* ---------- PDF de la orden de trabajo (mismo sistema que la cotización: rápido y sin colgarse) ---------- */
+async function pdfOt(o) {
+  const { jsPDF } = await cargarScript(JSPDF_URL, 'jspdf');
+  const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+  const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight(), M = 14, W = PW - 2 * M, X = M, PT = 0.3528;
+  const color = (h, tipo = 'text') => { const [r, g, b] = rgb(h); if (tipo === 'text') doc.setTextColor(r, g, b); else if (tipo === 'fill') doc.setFillColor(r, g, b); else doc.setDrawColor(r, g, b); };
+  const fuente = (tam, estilo = 'normal', col = PDF_COL.tinta) => { doc.setFont('helvetica', estilo); doc.setFontSize(tam); color(col); };
+  const alto = (tam, lh = 1.3) => tam * PT * lh;
+  const limpio = s => String(s ?? '').replace(/[\s ]+/g, ' ').trim();
+  const texto = (s, x, y, o2 = {}) => doc.text(typeof s === 'string' ? s : s ?? '', x, y, { baseline: 'top', ...o2 });
+  const partir = (s, ancho) => doc.splitTextToSize(limpio(s), ancho);
+  const etiqueta = (s, x, y, col = PDF_COL.oro) => { fuente(6.8, 'bold', col); texto(String(s).toUpperCase(), x, y, { charSpace: 0.5 }); };
+  const caja = (x, y, w, h, fondo, borde = PDF_COL.linea, r = 1.8) => { color(fondo, 'fill'); if (borde) color(borde, 'draw'); doc.setLineWidth(0.25); doc.roundedRect(x, y, w, h, r, r, borde ? 'FD' : 'F'); };
+  const cl = o.cliente || {}, items = (o.items || []).map(x => normalizarItem({ ...x }));
+  const unidades = items.reduce((s, i) => s + (+i.cantidad || 0), 0);
+  const envio = o.envio || {};
+  const viaEnvio = envio.modo === 'retiro' ? 'Retira en taller' : envio.modo === 'sucursal' ? 'Correos de Chile · retiro en sucursal'
+    : envio.modo === 'domicilio' ? 'Correos de Chile · a domicilio' : envio.modo === 'manual' ? 'Otro transporte' : '';
+  const ent = otEntrega(o);
+  let y = M;
+
+  // encabezado
+  const lc = await imagenPlana('logo-compacto.png');
+  if (lc) doc.addImage(lc.data, 'JPEG', X, y, 13 * lc.w / lc.h, 13);
+  const xl = X + 13 * (lc ? lc.w / lc.h : 2) + 4;
+  fuente(15, 'bold'); texto('Orden de trabajo', xl, y + 1.5);
+  fuente(8.5, 'normal', PDF_COL.gris); texto('Uso interno · taller', xl, y + 8);
+  caja(X + W - 42, y, 42, 14, PDF_COL.tinta, null, 2);
+  fuente(7, 'bold', '#d9c48a'); texto('OT N°', X + W - 39, y + 2.2, { charSpace: 0.4 });
+  fuente(20, 'bold', '#ffffff'); doc.text(String(o.numero ?? '—'), X + W - 3, y + 8.5, { baseline: 'middle', align: 'right' });
+  y += 17;
+
+  // fechas
+  const fechas = [['Fecha OT', fechaCL(o.fecha)], ['Entrega', ent ? fechaLarga(ent) : 'Por definir'], ['Cotización', o.cotDoc || o.cotNumero || '—'], ['Orden de compra', o.oc || '—'], ['ID', o.idInterno || 's/n']];
+  const anchos = [28, 52, 28, 46, W - 28 - 52 - 28 - 46], gap = 0;
+  let xf = X;
+  fechas.forEach(([k, v], i) => {
+    const w = anchos[i], esEnt = i === 1;
+    caja(xf, y, w - 1.5, 12, esEnt ? '#fde8e6' : PDF_COL.tarjeta, esEnt ? '#f3c5c0' : PDF_COL.linea);
+    etiqueta(k, xf + 2.5, y + 2, esEnt ? '#b3261e' : PDF_COL.gris);
+    fuente(esEnt ? 11 : 9.5, 'bold', esEnt ? '#b3261e' : PDF_COL.tinta);
+    texto(doc.splitTextToSize(esEnt ? String(v).toUpperCase() : limpio(v), w - 5)[0] || '', xf + 2.5, y + 6);
+    xf += w + gap;
+  });
+  y += 15;
+
+  // cliente y despacho
+  const cw = (W - 4) / 2, pad = 3.5;
+  const filasCli = [['Contacto', cl.contacto], ['Teléfono', cl.telefono], ['Email', cl.email]].filter(f => f[1]);
+  const filasDesp = envio.modo === 'retiro' ? [] : [['Ciudad', cl.comuna], ['Región', cl.region], viaEnvio ? ['Envío', viaEnvio + (envio.cajas ? ' · ' + envio.cajas : '')] : null].filter(f => f && f[1]);
+  fuente(11, 'bold'); const nomL = partir(cl.nombre, cw - 2 * pad);
+  const dirTxt = envio.modo === 'retiro' ? 'RETIRA EN TALLER' : limpio(cl.direccion || 'Sin dirección').toUpperCase();
+  fuente(10, 'bold'); const dirL = partir(dirTxt, cw - 2 * pad - 4);
+  const kvAlto = filas => filas.reduce((s, [k, v]) => { fuente(8.5, 'normal'); return s + Math.max(1, partir(v, cw - 2 * pad - 22).length) * alto(8.5) + 1; }, 0);
+  const hInfo = Math.max(pad + 4.5 + nomL.length * alto(11) + 1 + kvAlto(filasCli), pad + 4.5 + dirL.length * alto(10) + 3 + kvAlto(filasDesp)) + pad;
+  caja(X, y, cw, hInfo, PDF_COL.tarjeta); caja(X + cw + 4, y, cw, hInfo, PDF_COL.tarjeta);
+  const kv = (filas, x, yy) => { for (const [k, v] of filas) { fuente(8.5, 'normal', PDF_COL.gris); texto(k, x, yy); fuente(8.5, 'normal', PDF_COL.tinta); const ls = partir(v, cw - 2 * pad - 22); texto(ls, x + 22, yy); yy += ls.length * alto(8.5) + 1; } };
+  etiqueta('Cliente', X + pad, y + pad);
+  fuente(11, 'bold'); texto(nomL, X + pad, y + pad + 4.5);
+  kv(filasCli, X + pad, y + pad + 4.5 + nomL.length * alto(11) + 1);
+  const xd = X + cw + 4;
+  etiqueta('Despacho', xd + pad, y + pad);
+  color('#fff3b0', 'fill'); doc.roundedRect(xd + pad, y + pad + 4, cw - 2 * pad, dirL.length * alto(10) + 2, 1.2, 1.2, 'F');
+  fuente(10, 'bold'); texto(dirL, xd + pad + 2, y + pad + 5);
+  kv(filasDesp, xd + pad, y + pad + 4 + dirL.length * alto(10) + 3);
+  y += hInfo + 4;
+
+  fuente(9, 'normal', PDF_COL.gris);
+  texto(`${items.length} producto${items.length === 1 ? '' : 's'} · `, X, y);
+  fuente(9, 'bold', PDF_COL.tinta); texto(`${unidades} unidad${unidades === 1 ? '' : 'es'}`, X + doc.getTextWidth(`${items.length} producto${items.length === 1 ? '' : 's'} · `) + 0.5, y);
+  y += 6;
+
+  // productos
+  const FW = 46, FH = 34;
+  for (const [i, it] of items.entries()) {
+    const nombre = it.titulo || tituloAuto(it) || productoEf(it), subtipo = esBandera(it) ? (it.tipo || '') : productoEf(it);
+    const anchoB = W - FW - 10;
+    fuente(11, 'bold'); const nomI = partir(nombre, anchoB - 30);
+    fuente(8.5, 'normal'); const detL = it.obs ? partir(textoCliente(it.obs), anchoB) : [];
+    const notaL = it.notaTaller ? partir('¡Atención! ' + it.notaTaller, anchoB - 4) : [];
+    const hB = 3 + nomI.length * alto(11) + (subtipo && subtipo !== nombre ? alto(8.5) + 0.5 : 0) + 2 + 11 + 2 + (detL.length ? detL.length * alto(8.5) + 1.5 : 0) + (notaL.length ? notaL.length * alto(8.5) + 4 : 0) + 2;
+    const h = Math.max(FH + 4, hB);
+    if (y + h > PH - M) { doc.addPage(); y = M; }
+    caja(X, y, W, h, '#ffffff');
+    const src = imgDe(it.imagen);
+    if (src) { const im = await imagenProducto(src, FW, FH); if (im) doc.addImage(im, 'PNG', X + 2, y + (h - FH) / 2, FW, FH); }
+    else { caja(X + 2, y + (h - FH) / 2, FW, FH, '#f3f1ec', null); fuente(8, 'bold', '#b8b4aa'); texto('SIN IMAGEN', X + 2 + FW / 2, y + h / 2 - 1.5, { align: 'center' }); }
+    const xb = X + FW + 6; let yb = y + 3;
+    color(PDF_COL.tinta, 'fill'); doc.circle(xb + 2.6, yb + 2.4, 2.6, 'F');
+    fuente(8, 'bold', '#ffffff'); doc.text(String(i + 1), xb + 2.6, yb + 2.5, { baseline: 'middle', align: 'center' });
+    fuente(11, 'bold'); texto(nomI, xb + 7, yb);
+    fuente(18, 'bold'); doc.text(String(+it.cantidad || 0), X + W - 10, yb + 3, { baseline: 'middle', align: 'right' });
+    fuente(9, 'normal', PDF_COL.gris); texto('u.', X + W - 9, yb + 1.6);
+    yb += nomI.length * alto(11);
+    if (subtipo && subtipo !== nombre) { fuente(8.5, 'normal', PDF_COL.gris); texto(limpio(subtipo), xb + 7, yb); yb += alto(8.5) + 0.5; }
+    yb += 2;
+    // especificaciones
+    const specs = [['Medida (m)', medidaEf(it).replace(/\s*x\s*/i, ' × ') || '—', 24], ['Tela', materialEf(it) || '—', 28], ['D/Faz', it.dfaz, 14], ['Aplicado', it.aplicado, 20], ['Terminación', it.vaina || '—', anchoB - 24 - 28 - 14 - 20]];
+    let xs = xb;
+    for (const [k, v, w] of specs) {
+      caja(xs, yb, w - 1.2, 11, PDF_COL.tarjeta);
+      etiqueta(k, xs + 1.8, yb + 1.6, PDF_COL.gris);
+      if (typeof v === 'boolean') {
+        color('#9a958b', 'draw'); doc.setLineWidth(0.3); doc.rect(xs + 1.8, yb + 5.2, 3.8, 3.8);
+        if (v) { color(PDF_COL.tinta, 'draw'); doc.setLineWidth(0.6); doc.line(xs + 2.4, yb + 7.2, xs + 3.4, yb + 8.3); doc.line(xs + 3.4, yb + 8.3, xs + 5.1, yb + 5.8); }
+      } else { fuente(8.8, 'bold'); texto(doc.splitTextToSize(limpio(v), w - 4)[0] || '', xs + 1.8, yb + 5.5); }
+      xs += w;
+    }
+    yb += 13;
+    if (detL.length) { fuente(8.5, 'normal', '#3c3c41'); texto(detL, xb, yb); yb += detL.length * alto(8.5) + 1.5; }
+    if (notaL.length) { color('#fff3b0', 'fill'); doc.roundedRect(xb, yb, anchoB, notaL.length * alto(8.5) + 2.5, 1.2, 1.2, 'F'); fuente(8.5, 'bold'); texto(notaL, xb + 2, yb + 1.2); }
+    y += h + 3;
+  }
+  if (items.some(i => i.imagen)) { fuente(7, 'italic', PDF_COL.gris); texto('Imágenes referenciales', X, y); y += alto(7) + 2; }
+
+  // observaciones del taller
+  fuente(9, 'normal'); const obsL = o.obsTaller ? partir(o.obsTaller, W - 8) : [];
+  const hObs = 8 + (obsL.length ? obsL.length * alto(9) + 2 : 20);
+  if (y + hObs > PH - M) { doc.addPage(); y = M; }
+  caja(X, y, W, hObs, '#ffffff');
+  etiqueta('Observaciones del taller', X + 4, y + 3);
+  if (obsL.length) { fuente(9, 'normal'); texto(obsL, X + 4, y + 8); }
+  else for (let k = 0; k < 3; k++) { color(PDF_COL.linea, 'draw'); doc.setLineWidth(0.25); doc.line(X + 4, y + 13 + k * 6, X + W - 4, y + 13 + k * 6); }
+  const n = doc.getNumberOfPages();
+  if (n > 1) for (let i = 1; i <= n; i++) { doc.setPage(i); fuente(7, 'normal', PDF_COL.gris); texto(`OT ${o.numero} · página ${i} de ${n}`, X + W, PH - 8, { align: 'right' }); }
+  return doc;
+}
+async function imprimirOt(o) {
+  await asegurarImagenes(o.items);
+  const nombre = `OT ${o.numero} - ${o.cliente?.nombre || ''}`;
+  toast('Generando PDF…');
+  try {
+    const doc = await pdfOt(o);
+    const archivo = nombre.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim() + '.pdf';
+    doc.save(archivo); toast('PDF descargado: ' + archivo);
+  } catch (e) { console.error(e); toast('No se pudo generar el PDF: ' + e.message); }
+}
+/* La librería del PDF se baja apenas abre la app (en segundo plano): al apretar PDF sale al tiro. */
+setTimeout(() => { cargarScript(JSPDF_URL, 'jspdf').catch(() => {}); }, 3000);

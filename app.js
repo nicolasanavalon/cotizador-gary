@@ -1757,7 +1757,11 @@ async function descargarPdf(html, nombre) {
     }).from(hoja).save();
     toast('PDF descargado: ' + archivo);
   } catch (e) { toast('No se pudo generar el PDF: ' + e.message); }
-  finally { fuera.parentNode && fuera.parentNode.removeChild(fuera); }
+  finally {
+    fuera.parentNode && fuera.parentNode.removeChild(fuera);
+    // si la librería deja su capa encima de la página, se saca para que nunca quede "pegada"
+    document.querySelectorAll('.html2pdf__overlay').forEach(el => el.parentNode && el.parentNode.removeChild(el));
+  }
 }
 async function imprimir(html, titulo) {
   $('#print').innerHTML = html;
