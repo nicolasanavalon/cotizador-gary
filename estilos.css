@@ -624,3 +624,9 @@ table.comp td.arg .est{color:#8a6814}
 .tr-tabla td input{width:96px}
 @media(max-width:700px){#dlgTrad{padding:14px}.tr-tabla{font-size:12px}.tr-tabla input.cant,.tr-tabla td input{width:78px}.tr-tabla td input.pct{width:50px}}
 .tr-tabla input.cant,.tr-tabla input.cant:focus{width:170px}
+
+.gal-head{flex-wrap:wrap}
+#galCliente{flex-basis:100%;font-size:12px;color:var(--muted);margin-top:-6px}
+#galCliente:empty{display:none}
+.gal-cuerpo h3 small{font-weight:600;color:var(--muted);margin-left:4px}
+.gal-cli{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

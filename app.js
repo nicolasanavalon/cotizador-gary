@@ -447,49 +447,109 @@ async function subirImagen(it, file) {
 /* ---------- Biblioteca de imágenes (en la nube, en Config 'biblioteca') ----------
    Cada entrada: { i: id imagen, t: id miniatura, n: [nombres de producto con que se usó], u: usos, f: última fecha } */
 const normTxt = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const palabras = s => normTxt(s).split(/[^a-z0-9ñ]+/).filter(w => w.length >= 4);
+/* Abreviaturas que se usan en el taller → palabra completa (para que "Pab. Nac" calce con "Pabellón Nacional"). */
+const SINONIMOS = { pab: 'pabellon', nac: 'nacional', gall: 'gallardete', ecritorio: 'escritorio', escr: 'escritorio', inst: 'institucional', bom: 'bomberos' };
+const palabras = s => normTxt(s).split(/[^a-z0-9ñ]+/).map(w => SINONIMOS[w] || w).filter(w => w.length >= 4);
+/* La biblioteca se guarda en la nube repartida en trozos (Config: bibPartes, bib0, bib1…) porque cada
+   celda de la planilla admite como máximo 50.000 caracteres. */
 function biblioteca() {
-  if (!Array.isArray(CFG.biblioteca)) CFG.biblioteca = [];
+  if (!Array.isArray(CFG.biblioteca) || CFG._bibPartesLeidas !== CFG.bibPartes) {
+    let arr = [];
+    if (+CFG.bibPartes > 0) for (let i = 0; i < +CFG.bibPartes; i++) arr = arr.concat(Array.isArray(CFG['bib' + i]) ? CFG['bib' + i] : []);
+    if (Array.isArray(CFG.biblioteca)) {   // formato antiguo / entradas locales aún no subidas
+      const ids = new Set(arr.map(e => e.i)); for (const e of CFG.biblioteca) if (!ids.has(e.i)) arr.push(e);
+    }
+    CFG.biblioteca = arr; CFG._bibPartesLeidas = CFG.bibPartes;
+  }
   // aprende también de las cotizaciones ya guardadas
   const ya = new Set(CFG.biblioteca.map(e => e.i));
   for (const c of COTS) for (const x of (c.items || [])) if (x.imagen && !ya.has(x.imagen)) {
-    ya.add(x.imagen); CFG.biblioteca.push({ i: x.imagen, t: null, n: [x.titulo || tituloAuto(normalizarItem({ ...x }))].filter(Boolean), u: 1, f: c.fecha || hoy() });
+    ya.add(x.imagen);
+    CFG.biblioteca.push({ i: x.imagen, t: null, n: [x.titulo || tituloAuto(normalizarItem({ ...x }))].filter(Boolean), c: [c.cliente?.nombre].filter(Boolean), u: 1, f: c.fecha || hoy() });
   }
   return CFG.biblioteca;
 }
+function subirBiblioteca() {
+  const bib = biblioteca(), partes = [];
+  let actual = [], largo = 2;
+  for (const e of bib) {
+    const l = JSON.stringify(e).length + 1;
+    if (largo + l > 35000 && actual.length) { partes.push(actual); actual = []; largo = 2; }
+    actual.push(e); largo += l;
+  }
+  if (actual.length) partes.push(actual);
+  const cfg = { bibPartes: partes.length, biblioteca: null };
+  partes.forEach((p, i) => { cfg['bib' + i] = p; CFG['bib' + i] = p; });
+  CFG.bibPartes = partes.length; CFG._bibPartesLeidas = partes.length;
+  saveCfg(); subirConfig(cfg).catch(() => {});
+}
 function registrarEnBiblioteca(id, it, thumbId, extra) {
   const bib = biblioteca(); let e = bib.find(x => x.i === id);
-  if (!e) { e = { i: id, t: thumbId || null, n: [], u: 0, f: hoy() }; bib.push(e); }
+  if (!e) { e = { i: id, t: thumbId || null, n: [], c: [], u: 0, f: hoy() }; bib.push(e); }
   if (thumbId) e.t = thumbId;
-  const nombre = (it.titulo || tituloAuto(it) || extra || '').trim().slice(0, 50);
+  const nombre = (it.titulo || tituloAuto(it) || extra || '').trim().slice(0, 60);
   if (nombre && !e.n.some(x => normTxt(x) === normTxt(nombre))) e.n = [nombre, ...e.n].slice(0, 4);
+  const cli = (D.cliente?.nombre || '').trim().slice(0, 60);
+  e.c = e.c || [];
+  if (cli && !e.c.some(x => normTxt(x) === normTxt(cli))) e.c = [cli, ...e.c].slice(0, 4);
   e.u = (+e.u || 0) + 1; e.f = hoy();
-  saveCfg(); subirConfig({ biblioteca: bib }).catch(() => {});
+  subirBiblioteca();
 }
+/* Palabras que no distinguen a un cliente (si no, "Municipalidad" sugeriría todas las municipalidades). */
+const GENERICAS = new Set(('municipalidad ilustre corporacion municipal servicio region regional comuna chile sociedad limitada ltda empresa ' +
+  'gobierno ministerio departamento direccion provincial nacional publica publico educacion salud deporte deportes colegio liceo escuela ' +
+  'universidad compania club fundacion asociacion centro general bandera banderas institucional').split(' '));
+const palabrasCliente = s => palabras(s).filter(w => !GENERICAS.has(w));
 let GAL = null;
 async function abrirGaleria(it) {
-  GAL = { it };
+  GAL = { it, cargadas: 0 };
   $('#galBuscar').value = it.titulo || tituloAuto(it) || '';
+  $('#galCliente').textContent = D.cliente?.nombre ? `Cliente: ${D.cliente.nombre}` : '';
   $('#dlgGaleria').showModal();
   renderGaleria();
-  const bib = biblioteca();
-  await asegurarImagenes(bib.map(e => ({ imagen: e.t || e.i })));
-  if ($('#dlgGaleria').open) renderGaleria();
+  cargarMiniaturas();
+}
+/* Trae las miniaturas por tandas, empezando por las que se ven primero. */
+async function cargarMiniaturas() {
+  const orden = ordenGaleria().flat();
+  const faltan = orden.filter(e => !imgDe(e.t) && !imgDe(e.i));
+  for (let i = 0; i < faltan.length && $('#dlgGaleria').open; i += 30) {
+    await asegurarImagenes(faltan.slice(i, i + 30).map(e => ({ imagen: e.t || e.i })));
+    if ($('#dlgGaleria').open) renderGaleria();
+  }
+}
+function puntaje(e, pq, pc) {
+  let s = 0;
+  const nom = e.n.flatMap(palabras), cli = (e.c || []).flatMap(palabrasCliente);
+  const pega = (a, b) => a.some(w => b.some(p => w.startsWith(p) || p.startsWith(w)));
+  if (pq.length && pega(nom, pq)) s += 2;                       // nombre del producto (lo que se escribe pesa más)
+  if (pc.length && pega(cli, pc)) s += 1;                       // mismo cliente (suma; sola pesa menos que el nombre)
+  if (pc.length && pega(nom, pc)) s += 3;                       // el nombre menciona al cliente (ej. "Bandera Osorno")
+  return s;
+}
+function ordenGaleria() {
+  const q = $('#galBuscar').value, pq = palabras(q).filter(w => !/^banderas?$/.test(w)), pc = palabrasCliente(D.cliente?.nombre || ''), bib = biblioteca();
+  const conPuntaje = bib.map(e => ({ e, p: puntaje(e, pq, pc) }));
+  const sug = conPuntaje.filter(x => x.p > 0).sort((a, b) => (b.p - a.p) || (b.e.u - a.e.u)).slice(0, 24).map(x => x.e);
+  const resto = bib.filter(e => !sug.includes(e));
+  const frec = resto.filter(e => e.u >= 2).sort((a, b) => (b.u - a.u) || String(b.f).localeCompare(String(a.f)));
+  const poco = resto.filter(e => e.u < 2).sort((a, b) => String(b.f).localeCompare(String(a.f)));
+  return [sug, frec, poco];
 }
 function renderGaleria() {
-  const q = $('#galBuscar').value, pq = palabras(q), bib = biblioteca();
-  const coincide = e => pq.length && e.n.some(n => palabras(n).some(w => pq.some(p => w.startsWith(p) || p.startsWith(w))));
+  const q = $('#galBuscar').value, bib = biblioteca();
+  const [sug, frec, poco] = ordenGaleria();
   const tarjeta = e => { const src = imgDe(e.t) || imgDe(e.i);
-    return `<button type="button" class="gal-item" data-gal="${esc(e.i)}">${src ? `<img src="${src}" alt="">` : `<span class="gal-vacia">${ICONO_BANDERA}</span>`}
-      <span class="gal-nom">${esc(e.n[0] || 'Sin nombre')}</span><span class="gal-usos">${e.u} uso${e.u === 1 ? '' : 's'}</span></button>`; };
-  const porUso = [...bib].sort((a, b) => (b.u - a.u) || String(b.f).localeCompare(String(a.f)));
-  const sug = porUso.filter(coincide);
-  const frec = porUso.filter(e => !sug.includes(e)).slice(0, 8);
-  const resto = [...bib].filter(e => !sug.includes(e) && !frec.includes(e)).sort((a, b) => String(b.f).localeCompare(String(a.f)));
-  const filtro = q.trim() && !sug.length ? '' : '';
-  const sec = (tit, arr) => arr.length ? `<h3>${tit}</h3><div class="gal-grid">${arr.map(tarjeta).join('')}</div>` : '';
+    const sub = [(e.c || [])[0], e.o ? 'OT ' + e.o : ''].filter(Boolean).join(' · ');
+    return `<button type="button" class="gal-item" data-gal="${esc(e.i)}" title="${esc([...e.n, ...(e.c || [])].join(' · '))}">
+      ${src ? `<img src="${src}" alt="" loading="lazy">` : `<span class="gal-vacia">${ICONO_BANDERA}</span>`}
+      <span class="gal-nom">${esc(e.n[0] || 'Sin nombre')}</span>${sub ? `<span class="gal-cli">${esc(sub)}</span>` : ''}
+      <span class="gal-usos">${e.u} uso${e.u === 1 ? '' : 's'}</span></button>`; };
+  const sec = (tit, arr, extra = '') => arr.length ? `<h3>${tit} <small>${arr.length}</small>${extra}</h3><div class="gal-grid">${arr.map(tarjeta).join('')}</div>` : '';
+  const motivo = [q.trim() ? `“${esc(q)}”` : '', D.cliente?.nombre ? esc(D.cliente.nombre) : ''].filter(Boolean).join(' y ');
   $('#galCuerpo').innerHTML = !bib.length ? '<p class="empty">Todavía no hay imágenes. Sube la primera: queda guardada en la nube para las próximas cotizaciones.</p>'
-    : sec(`Sugeridas para “${esc(q)}”`, sug) + sec('De uso frecuente', frec) + sec('Todas las demás', resto) + filtro;
+    : (sug.length ? '' : `<p class="hint">Sin sugerencias para ${motivo || 'este producto'}.</p>`) +
+      sec(`Sugeridas${motivo ? ' para ' + motivo : ''}`, sug) + sec('De uso frecuente', frec) + sec('De uso poco frecuente', poco);
 }
 $('#galBuscar').addEventListener('input', renderGaleria);
 $('#galCerrar').onclick = () => $('#dlgGaleria').close();

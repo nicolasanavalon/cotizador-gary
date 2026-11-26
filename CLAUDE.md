@@ -48,9 +48,11 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   además el margen real sobre venta. Sin costo hasta que se costea.
 
 ## Imágenes
-- Biblioteca en la nube (Config `biblioteca` + miniaturas en la hoja Imagenes): al agregar imagen se
-  abre una galería con sugeridas por nombre del producto, las de uso frecuente y el resto; aprende
-  de cada uso. La cotización y la OT dicen que las imágenes son referenciales.
+- Biblioteca en la nube (Config `bibPartes`/`bib0..n`, en trozos por el límite de 50.000 caracteres
+  por celda; miniaturas e imágenes en la hoja Imagenes). Galería: **Sugeridas** (por nombre del
+  producto y por **cliente**; palabras genéricas como "Municipalidad" no cuentan), **De uso frecuente**
+  (2+ usos) y **De uso poco frecuente**. Aprende de cada uso (nombre, cliente, cantidad de usos).
+  Se importaron las fotos del panel de producción (taller-gary) con su producto, cliente, OT y usos. La cotización y la OT dicen que las imágenes son referenciales.
 
 ## Precios y margen
 - El margen es **sobre el precio de venta**: `precio = costo / (1 − margen)`, redondeado hacia arriba.
