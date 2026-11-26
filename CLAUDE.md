@@ -130,6 +130,8 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - **Facturación**: se puede **adjuntar el archivo de la factura** y el **comprobante de pago** (PDF o foto, máx. 4 MB;
   se guardan en la hoja Imagenes como `fac…`/`pag…`; `cot.factura.archivo` / `cot.factura.comprobante`).
 - Cotizaciones: sin columna "Siguiente paso"; Enviada / Aprobar / Rechazar van junto a Abrir, PDF, Duplicar, Borrar.
+- **En cada publicación cambiar la versión en 3 lugares**: `?v=` de los JS/CSS en index.html, `window.__VERSION__` en index.html
+  y `version.txt`. La app consulta version.txt sin caché: si cambió, recarga sola al abrir o muestra "Hay una versión nueva · Actualizar".
 - **Datos de ejemplo**: cotizaciones E1–E11 y OT 543–548 marcadas `demo: true`, sin usar la numeración real.
   Se borran en Configuración → "Borrar datos de ejemplo".
 
