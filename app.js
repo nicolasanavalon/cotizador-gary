@@ -1147,8 +1147,28 @@ function dimsDe(medida) {
   const a = parseFloat(m[1]), b = parseFloat(m[2]);
   return { mayor: Math.max(a, b), menor: Math.min(a, b) };
 }
-function tradDefaults(it) {
-  const td = tradDef(), dm = dimsDe(medidaEf(it)) || { mayor: 0, menor: 0 };
+/* Medida para el costeo: la del producto o, si no se eligió, la que aparezca escrita en el nombre o
+   la descripción (ej. "Bandera 1,50 x 1,00", "150x100 cm"). */
+function medidaDeTexto(txt) {
+  const m = String(txt || '').replace(/(\d),(\d)/g, '$1.$2').match(/(\d+(?:\.\d+)?)\s*(?:m(?:ts?)?\.?)?\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(cm|mts?|m)?\b/i);
+  if (!m) return '';
+  let a = parseFloat(m[1]), b = parseFloat(m[2]);
+  if (/cm/i.test(m[3] || '') || (a >= 20 && b >= 20)) { a /= 100; b /= 100; }   // en centímetros
+  if (!(a > 0 && b > 0) || a > 30 || b > 30) return '';
+  return normMedida(`${a}x${b}`);
+}
+const medidaTrad = it => medidaEf(it) || medidaDeTexto([it.titulo, it.descripcion, it.obs].join(' '));
+/* Cambia la medida de un costeo: actualiza tela, vaina y argollas si seguían con el valor automático
+   (lo que se haya editado a mano se respeta). */
+function ajustarMedidaTrad(t, it, medida) {
+  const antes = tradDefaults(it, t.medida || ''), nuevo = tradDefaults(it, medida);
+  const auto = k => !t[k] || (t[k].f || '') === (antes[k].f || '') && (t[k].f || Math.abs((+t[k].cant || 0) - (+antes[k].cant || 0)) < 0.005);
+  for (const k of ['tela', 'vaina', 'argollas']) if (auto(k)) { t[k] = { ...t[k], cant: nuevo[k].cant, f: nuevo[k].f }; }
+  t.medida = medida;
+}
+function tradDefaults(it, medida) {
+  if (medida === undefined) medida = medidaTrad(it);
+  const td = tradDef(), dm = dimsDe(medida) || { mayor: 0, menor: 0 };
   const dfaz = /2\/Faz/i.test(it.tipo || '');
   const precioTela = +(compTelas().find(t => t.nombre === it.material)?.precio) || td.tela;
   const telaCant = dm.mayor * dm.menor / 1.4 * 1.2;          // Excel: ((largo × alto) / 1,4) × 1,2
@@ -1160,11 +1180,11 @@ function tradDefaults(it) {
     crea: { cant: dfaz ? 0 : telaCant / 12, f: dfaz ? null : '=tela/12', costo: precioTela },
     extra: { cant: extra, f: dfaz ? '=tela' : null, costo: precioTela },
     vaina: { cant: r2(dm.menor * 2 + 0.1), costo: td.vaina },
-    argollas: { cant: medidaEf(it) ? cantidadArgollas(medidaEf(it)).n : 0, costo: td.argolla },
+    argollas: { cant: medida ? cantidadArgollas(medida).n : 0, costo: td.argolla },
     armado: { cant: 1, costo: td.armado },
     cortado: { cant: td.cortado }, feston: { cant: dfaz ? 0 : td.feston }, limpieza: { cant: td.limpieza }, embolsado: { cant: td.embolsado },
     sublimado: { cant: extra * 2, f: '=extra*2', costo: td.sublimado },
-    flete: td.flete, finan: td.finan, imprev: td.imprev,
+    flete: td.flete, finan: td.finan, imprev: td.imprev, medida,
   };
 }
 function calcTrad(t) {
@@ -1205,9 +1225,14 @@ function recalcFormulas(t) {
 let TR = null;
 function abrirTrad(it) {
   TR = { it, t: JSON.parse(JSON.stringify(it.trad || tradDefaults(it))), errores: {} };
+  const med = medidaTrad(it);
+  if (TR.t.medida === undefined) TR.t.medida = it.trad ? (dimsDe(medidaEf(it)) ? medidaEf(it) : '') : med;   // costeos antiguos
+  if (med && med !== TR.t.medida) ajustarMedidaTrad(TR.t, it, med);   // la medida del producto cambió
   TR.errores = recalcFormulas(TR.t);
   $('#trTitulo').textContent = it.titulo || tituloAuto(it) || 'Producto';
-  $('#trSub').textContent = [esBandera(it) ? it.tipo : productoEf(it), materialEf(it), medidaEf(it), (+it.cantidad || 0) + ' u.'].filter(Boolean).join(' · ');
+  $('#trSub').textContent = [esBandera(it) ? it.tipo : productoEf(it), materialEf(it), (+it.cantidad || 0) + ' u.'].filter(Boolean).join(' · ');
+  $('#trMedida').value = TR.t.medida || '';
+  avisoMedidaTrad();
   renderTrad();
   $('#dlgTrad').showModal();
 }
@@ -1275,7 +1300,7 @@ function refrescarCants() {
 }
 $('#dlgTrad').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input.cant')) { e.preventDefault(); e.target.blur(); } });
 $('#trCancelar').onclick = () => $('#dlgTrad').close();
-$('#trDefecto').onclick = () => { TR.t = tradDefaults(TR.it); TR.errores = recalcFormulas(TR.t); renderTrad(); };
+$('#trDefecto').onclick = () => { TR.t = tradDefaults(TR.it, TR.t.medida || medidaTrad(TR.it)); TR.errores = recalcFormulas(TR.t); renderTrad(); };
 $('#trGuardarDef').onclick = () => {
   const t = TR.t;
   CFG.tradDef = { tela: t.tela.costo, vaina: t.vaina.costo, argolla: t.argollas.costo, armado: t.armado.costo, sublimado: t.sublimado.costo,
@@ -1283,8 +1308,22 @@ $('#trGuardarDef').onclick = () => {
   saveCfg(); subirConfig({ tradDef: CFG.tradDef }).then(() => toast('Valores por defecto guardados'), err => toast('No se pudo guardar: ' + err.message));
   if (!nubeActiva()) toast('Valores por defecto guardados');
 };
+function avisoMedidaTrad() {
+  const falta = !dimsDe(TR.t.medida);
+  $('#trMedida').classList.toggle('err', falta);
+  $('#trMedidaAviso').textContent = falta ? 'Escribe la medida (ej. 1,50 x 1,00) para calcular tela, vaina y argollas' : '';
+}
+$('#trMedida').addEventListener('change', e => {
+  const m = dimsDe(e.target.value) ? normMedida(e.target.value) : '';
+  e.target.value = m || e.target.value;
+  ajustarMedidaTrad(TR.t, TR.it, m); TR.errores = recalcFormulas(TR.t); avisoMedidaTrad(); renderTrad();
+});
 $('#trAplicar').onclick = () => {
   const it = TR.it, c = calcTrad(TR.t);
+  if (TR.t.medida && TR.t.medida !== medidaEf(it)) {   // la medida escrita en el costeo pasa al producto
+    if (compData().medidas.some(m => m.medida === TR.t.medida)) { it.medida = TR.t.medida; it.medidaOtra = ''; }
+    else { it.medida = 'Otra'; it.medidaOtra = TR.t.medida; }
+  }
   it.trad = TR.t; it.costo = Math.round(c.total); it.costoManual = false; it.desglose = null;
   $('#dlgTrad').close(); renderItems();
 };
@@ -1299,7 +1338,7 @@ $('#items').addEventListener('change', e => {
   const it = itemDe(e.target); const f = e.target.dataset.f; if (!it || !f) return;
   if (f === 'vaina') { it.vaina = e.target.value; saveDraft(); return; }
   if (f === 'medidaOtra') {
-    it.medidaOtra = normMedida(e.target.value);
+    it.medidaOtra = normMedida(e.target.value); recosteoTrad(it);
     const cm = costoMatriz(it); if (cm != null && !esTrad(it)) { it.costo = cm; it.costoManual = false; it.desglose = null; }
     renderItems(); return;
   }
@@ -1310,10 +1349,18 @@ $('#items').addEventListener('change', e => {
     if (!it.material) it.material = compTelas().find(t => +t.precio > 0)?.nombre || '';   // por defecto la tela con precio (Bistrech)
     actualizarTituloAuto(it);
   }
+  if (f === 'medida' && it.medida !== 'Otra') recosteoTrad(it);
   const cm = costoMatriz(it);
   if (cm != null && !esTrad(it)) { it.costo = cm; it.costoManual = false; it.desglose = null; }
   renderItems();
 });
+function recosteoTrad(it) {
+  if (!esTrad(it) || !it.trad) return;
+  const m = medidaTrad(it); if (!m || m === it.trad.medida) return;
+  ajustarMedidaTrad(it.trad, it, m); recalcFormulas(it.trad);
+  it.costo = Math.round(calcTrad(it.trad).total);
+  toast('Costeo actualizado a la medida ' + m);
+}
 $('#items').addEventListener('input', e => {
   const it = itemDe(e.target); if (!it) return;
   const f = e.target.dataset.f;

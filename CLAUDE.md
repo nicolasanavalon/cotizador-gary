@@ -46,6 +46,10 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   `=extra*2`): al pinchar se ve la fórmula, al salir el resultado. El cuadro llega solo hasta el
   Total A + B (el margen se elige en la tarjeta del producto). El margen es **sobre la venta**, igual que
   en Matriz (decisión del dueño: no se usa recargo sobre costo; 7.895 con 50 % → 15.790). Sin costo hasta que se costea.
+- **Las fórmulas del Tradicional usan la medida del producto** (tela `=(largo*alto)/1,4*1,2`, vaina,
+  argollas). Si el producto no tiene medida, se toma la escrita en el nombre/descripción ("1,50 x 1,00",
+  "150x100 cm"); si no hay, el cuadro pide la medida (campo "Medida" arriba) y al aplicar pasa al producto.
+  Al cambiar la medida del producto, el costeo se recalcula solo (lo editado a mano se respeta).
 - **Por defecto los productos nuevos usan el método Tradicional** (es el que usa el papá).
 - La tarjeta del producto muestra costo unit., precio unit. neto, **margen unit.**, total neto, costo total y margen.
 

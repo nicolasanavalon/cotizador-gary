@@ -630,3 +630,8 @@ table.comp td.arg .est{color:#8a6814}
 #galCliente:empty{display:none}
 .gal-cuerpo h3 small{font-weight:600;color:var(--muted);margin-left:4px}
 .gal-cli{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.tr-medida{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:600;margin-top:8px}
+.tr-medida input{width:140px;padding:6px 8px;border:1px solid var(--line,#ddd);border-radius:8px;font:inherit;font-weight:500}
+.tr-medida input.err{border-color:#d33;background:#fff4f4}
+#trMedidaAviso{color:#b33;font-weight:500}
