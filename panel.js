@@ -46,7 +46,8 @@ function pedirDatos(titulo, sub, campos, textoOk = 'Guardar') {
   $('#formTitulo').textContent = titulo; $('#formSub').textContent = sub || ''; $('#formOk').textContent = textoOk;
   $('#formCampos').innerHTML = campos.map(c => {
     const id = 'fc_' + c.k;
-    const ctl = c.type === 'select'
+    const ctl = c.type === 'file' ? `<input id="${id}" type="file" accept="application/pdf,image/*">`
+      : c.type === 'select'
       ? `<select id="${id}">${c.opciones.map(o => opt(o, c.value)).join('')}</select>`
       : `<input id="${id}" type="${c.type === 'money' ? 'text' : c.type || 'text'}" ${c.type === 'money' ? 'data-money inputmode="numeric"' : ''}
           value="${esc(c.type === 'money' ? miles(c.value) : c.value ?? '')}" placeholder="${esc(c.placeholder || '')}" ${c.requerido ? 'required' : ''}>`;
@@ -59,7 +60,7 @@ function pedirDatos(titulo, sub, campos, textoOk = 'Guardar') {
     dlg.addEventListener('close', () => {
       if (dlg.returnValue !== 'ok') return res(null);
       const out = {};
-      for (const c of campos) { const v = $('#fc_' + c.k).value; out[c.k] = c.type === 'money' || c.type === 'number' ? num(v) : v.trim(); }
+      for (const c of campos) { const el = $('#fc_' + c.k), v = el.value; out[c.k] = c.type === 'file' ? (el.files[0] || null) : c.type === 'money' || c.type === 'number' ? num(v) : v.trim(); }
       res(out);
     }, { once: true });
   });
@@ -103,7 +104,8 @@ async function pasoCot(a, id) {
 
 /* ---------------- Facturación ---------------- */
 let FILTRO_FACT = '';
-const ETQ_FACT = { porFacturar: 'Por facturar', emitida: 'Por cobrar', vencida: 'Vencidas', pagada: 'Pagadas' };
+const ETQ_FACT = { porFacturar: 'Por facturar', cobrar: 'Por cobrar', vencida: 'Vencidas', pagada: 'Pagadas' };
+const enFiltroFact = (cod, filtro) => !filtro || cod === filtro || (filtro === 'cobrar' && (cod === 'emitida' || cod === 'vencida'));
 function renderFacturas() {
   const mes = hoy().slice(0, 7);
   const filas = COTS.filter(c => estadoCot(c) === 'Aprobada').map(c => ({ c, f: estadoFactura(c), ot: otDe(c) }))
@@ -119,22 +121,22 @@ function renderFacturas() {
     kpi('Vencido', clp(suma(de('vencida'))), `${de('vencida').length} factura(s) fuera de plazo`, de('vencida').length ? 'bad' : ''),
     kpi(`Cobrado en ${MESES_LARGO[+mes.slice(5) - 1]}`, clp(suma(cobradoMes)), `${cobradoMes.length} pago(s)`, 'ok'),
   ].join('');
-  $('#filtrosFact').innerHTML = [['', 'Todas', filas.length], ...Object.entries(ETQ_FACT).map(([k, l]) => [k, l, de(k).length])]
+  $('#filtrosFact').innerHTML = [['', 'Todas', filas.length], ...Object.entries(ETQ_FACT).map(([k, l]) => [k, l, filas.filter(x => enFiltroFact(x.f.codigo, k)).length])]
     .map(([v, l, n]) => `<button type="button" class="chip ${FILTRO_FACT === v ? 'active' : ''}" data-ff="${v}">${l} <small>${n}</small></button>`).join('');
-  const vis = filas.filter(x => !FILTRO_FACT || x.f.codigo === FILTRO_FACT);
+  const vis = filas.filter(x => enFiltroFact(x.f.codigo, FILTRO_FACT));
   if (!vis.length) { $('#tablaFact').innerHTML = `<tr><td class="empty">${filas.length ? 'Nada en este filtro.' : 'Aún no hay ventas aprobadas. Al aprobar una cotización aparece aquí para facturarla.'}</td></tr>`; return; }
   $('#tablaFact').innerHTML = `<thead><tr><th>Cotización</th><th>OT</th><th>Cliente</th><th>Condición de pago</th><th class="num">Total</th><th>Factura</th><th>Emisión</th><th>Vence</th><th>Estado</th><th></th></tr></thead><tbody>` +
     vis.map(({ c, f, ot }) => {
       const fa = c.factura || {};
       const acc = f.codigo === 'porFacturar' ? '<button class="btn sm primary" data-fa="facturar">Emitir factura</button>'
-        : f.codigo === 'pagada' ? `<small class="muted" title="${esc(fa.medioPago || '')}">pagada ${fechaCL(fa.fechaPago)}</small>`
+        : f.codigo === 'pagada' ? `<small class="muted" title="${esc(fa.medioPago || '')}">pagada ${fechaCL(fa.fechaPago)}</small> ${fa.comprobante ? linkAdj(fa.comprobante, 'comprobante', 'comprobante') : '<a href="#" class="adj add" data-adjuntar="comprobante">+ comprobante</a>'}`
         : '<button class="btn sm ok" data-fa="pagar">Registrar pago</button>';
       const estado = { porFacturar: ['Por facturar', 'PorFacturar'], emitida: ['Por cobrar', 'PorCobrar'], vencida: [`Vencida (${diasEntre(fa.vence, hoy())} días)`, 'Vencida'], pagada: ['Pagada', 'Pagada'] }[f.codigo];
       return `<tr data-id="${c.id}"><td><b>${esc(numDoc(c))}</b>${c.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}${c.oc ? `<br><small class="muted">${/^oc\b/i.test(c.oc) ? '' : 'OC '}${esc(c.oc)}</small>` : ''}</td>
         <td>${ot ? `${esc(ot.numero)}<br><small class="muted">${esc(ot.estado)}</small>` : '—'}</td>
         <td>${esc(c.cliente.nombre)}</td><td><small>${esc(c.condPago || '—')}</small></td>
         <td class="num">${clp(fa.total ?? c.totales?.bruto)}</td>
-        <td>${fa.numero ? `<b>N° ${esc(fa.numero)}</b>` : '—'}</td><td>${fechaCL(fa.fecha) || '—'}</td><td>${fechaCL(fa.vence) || '—'}</td>
+        <td>${fa.numero ? `<b>N° ${esc(fa.numero)}</b><br>${fa.archivo ? linkAdj(fa.archivo, 'archivo', 'ver factura') : '<a href="#" class="adj add" data-adjuntar="archivo">+ adjuntar</a>'}` : '—'}</td><td>${fechaCL(fa.fecha) || '—'}</td><td>${fechaCL(fa.vence) || '—'}</td>
         <td><span class="badge ${estado[1]}">${estado[0]}</span></td><td class="acc">${acc}</td></tr>`;
     }).join('') + '</tbody>';
 }
@@ -150,18 +152,22 @@ $('#tablaFact').addEventListener('click', async e => {
         { k: 'numero', label: 'N° de factura', placeholder: 'Ej: 1523', requerido: true },
         { k: 'fecha', label: 'Fecha de emisión', type: 'date', value: hoy(), requerido: true },
         { k: 'dias', label: 'Días de crédito', type: 'number', value: dias, ayuda: `Según la condición de pago: ${c.condPago || 'sin condición'}` },
-        { k: 'neto', label: 'Monto neto', type: 'money', value: t.neto, ayuda: 'Cámbialo si se factura una parte (ej. anticipo del 50%)' }], 'Emitir factura');
+        { k: 'neto', label: 'Monto neto', type: 'money', value: t.neto, ayuda: 'Cámbialo si se factura una parte (ej. anticipo del 50%)' },
+        { k: 'archivo', label: 'Adjuntar la factura (PDF o foto, opcional)', type: 'file' }], 'Emitir factura');
       if (!d) return;
       const neto = Math.round(d.neto || t.neto || 0), iva = Math.round(neto * IVA);
-      c.factura = { numero: d.numero, fecha: d.fecha, vence: sumarDias(d.fecha, d.dias), neto, iva, total: neto + iva, pagada: false };
+      const archivo = await subirAdjunto(d.archivo, 'fac');
+      c.factura = { numero: d.numero, fecha: d.fecha, vence: sumarDias(d.fecha, d.dias), neto, iva, total: neto + iva, pagada: false, archivo };
     }
     if (a === 'pagar') {
       const fa = c.factura;
       const d = await pedirDatos(`Registrar pago · factura N° ${fa.numero}`, `${c.cliente.nombre} · total ${clp(fa.total)}`, [
         { k: 'fecha', label: 'Fecha de pago', type: 'date', value: hoy(), requerido: true },
         { k: 'medio', label: 'Medio de pago', type: 'select', opciones: MEDIOS_PAGO, value: 'Transferencia' },
-        { k: 'monto', label: 'Monto recibido', type: 'money', value: fa.total }], 'Registrar pago');
+        { k: 'monto', label: 'Monto recibido', type: 'money', value: fa.total },
+        { k: 'archivo', label: 'Adjuntar comprobante de pago (opcional)', type: 'file' }], 'Registrar pago');
       if (!d) return;
+      if (d.archivo) fa.comprobante = await subirAdjunto(d.archivo, 'pag');
       Object.assign(fa, { pagada: true, fechaPago: d.fecha, medioPago: d.medio, montoPagado: d.monto || fa.total });
     }
     await guardarCotLista(c);
@@ -195,42 +201,30 @@ function datosPanel() {
 }
 function renderPanel() {
   $('#panelPeriodo').innerHTML = PERIODOS.map(([k, l]) => `<button type="button" class="chip ${PERIODO === k ? 'active' : ''}" data-per="${k}">${l}</button>`).join('');
-  const { cots, aprob, rech, venc, env, suma } = datosPanel();
+  const { desde, cots, aprob, rech, venc, suma } = datosPanel();
   if (!COTS.length) { $('#panelCuerpo').innerHTML = '<div class="card empty">Todavía no hay cotizaciones. Los indicadores aparecen a medida que se cotiza.</div>'; return; }
+  const etqPer = (PERIODOS.find(p => p[0] === PERIODO) || [])[1] || '';
+  const conDesde = extra => desde ? { ...extra, desde, etiqueta: [extra.etiqueta, etqPer.toLowerCase()].filter(Boolean).join(' · ') } : extra;
+  const acc = o => `data-accion="${esc(JSON.stringify(o))}" tabindex="0"`;
   const decididas = aprob.length + rech.length + venc.length;
   const tasa = decididas ? aprob.length / decididas : null;
   const tasaMonto = suma(aprob) + suma(rech) + suma(venc) ? suma(aprob) / (suma(aprob) + suma(rech) + suma(venc)) : null;
   const venta = suma(aprob), margen = suma(aprob, 'margen');
-  const dias = aprob.filter(x => x.c.fechaAprob).map(x => diasEntre(x.c.fechaEnvio || x.c.fecha, x.c.fechaAprob));
-  const porVencer = env.filter(x => { const v = venceCot(x.c); return v && v <= sumarDiasHabiles(hoy(), 3); });
   const todas = COTS.filter(c => estadoCot(c) === 'Aprobada').map(c => ({ c, f: estadoFactura(c) }));
   const totF = arr => arr.reduce((s, x) => s + (x.c.factura?.total ?? x.c.totales?.bruto ?? 0), 0);
   const porCobrar = todas.filter(x => ['emitida', 'vencida'].includes(x.f.codigo)), vencido = todas.filter(x => x.f.codigo === 'vencida');
   const porFacturar = todas.filter(x => x.f.codigo === 'porFacturar');
-  const otsAbiertas = OTS.filter(o => !['Entregada'].includes(o.estado));
-  const atrasadas = OTS.filter(otAtrasada);
+  const verCot = (estado, etiqueta) => acc({ ir: 'cot', estado, extra: desde ? { tipo: 'desde', valor: desde, etiqueta: etqPer.toLowerCase() } : null });
 
   const kpis = [
-    kpi('Cotizado (neto)', corto(suma(cots)), `${cots.length} cotizacion${cots.length === 1 ? '' : 'es'}`),
-    kpi('Vendido (neto)', corto(venta), `${aprob.length} aprobada${aprob.length === 1 ? '' : 's'}`, 'ok'),
+    `<div class="kpi clic" ${verCot('', 'todas')}><small>Cotizado (neto)</small><b>${corto(suma(cots))}</b><span>${cots.length} cotizacion${cots.length === 1 ? '' : 'es'}</span></div>`,
+    `<div class="kpi ok clic" ${verCot('Aprobada')}><small>Vendido (neto)</small><b>${corto(venta)}</b><span>${aprob.length} aprobada${aprob.length === 1 ? '' : 's'}</span></div>`,
     kpi('Tasa de aprobación', tasa == null ? '—' : pct(tasa), tasaMonto == null ? 'sin cotizaciones resueltas' : `${pct(tasaMonto)} del monto · ${aprob.length} de ${decididas}`),
     kpi('Margen de lo vendido', venta ? pct(margen / venta) : '—', venta ? `${corto(margen)} de margen` : ''),
     kpi('Venta promedio', aprob.length ? corto(venta / aprob.length) : '—', 'por cotización aprobada'),
-    kpi('Días para aprobar', dias.length ? Math.round(dias.reduce((a, b) => a + b, 0) / dias.length) + ' días' : '—', 'desde el envío, en promedio'),
-    kpi('En carpeta', corto(suma(env)), `${env.length} enviada${env.length === 1 ? '' : 's'} esperando respuesta${porVencer.length ? ` · <b>${porVencer.length} vence${porVencer.length === 1 ? '' : 'n'} pronto</b>` : ''}`, porVencer.length ? 'warn' : ''),
-    kpi('Por cobrar', corto(totF(porCobrar)), vencido.length ? `<b>${corto(totF(vencido))} vencido</b> · ${vencido.length} factura${vencido.length === 1 ? '' : 's'}` : `${porCobrar.length} factura${porCobrar.length === 1 ? '' : 's'} al día`, vencido.length ? 'bad' : ''),
+    `<div class="kpi clic ${vencido.length ? 'bad' : ''}" ${acc({ ir: 'fact', filtro: 'cobrar' })}><small>Por cobrar</small><b>${corto(totF(porCobrar))}</b>
+      <span>${vencido.length ? `<b>${corto(totF(vencido))} vencido</b> · ${vencido.length} factura${vencido.length === 1 ? '' : 's'}` : `${porCobrar.length} factura${porCobrar.length === 1 ? '' : 's'} al día`}${porFacturar.length ? ` · ${corto(totF(porFacturar))} por facturar` : ''}</span></div>`,
   ].join('');
-
-  // embudo del período
-  const conOt = aprob.filter(x => otDe(x.c)), entregadas = conOt.filter(x => ['Despachada', 'Entregada'].includes(otDe(x.c).estado));
-  const facturadas = aprob.filter(x => x.c.factura?.numero), pagadas = aprob.filter(x => x.c.factura?.pagada);
-  const enviadas = cots.filter(x => x.e !== 'Borrador');
-  const embudo = [['Cotizadas', cots], ['Enviadas', enviadas], ['Aprobadas', aprob], ['Con OT', conOt], ['Despachadas / entregadas', entregadas], ['Facturadas', facturadas], ['Pagadas', pagadas]]
-    .map(([l, arr]) => ({ l, n: arr.length, v: suma(arr) }));
-  const max0 = Math.max(1, embudo[0].n);
-  const htmlEmbudo = embudo.map((x, i) => `<div class="hb" data-tip="${tip(x.l, `${x.n} cotizaciones · ${clp(x.v)} neto`, i ? `${pct(x.n / max0)} de las cotizadas` : '')}" tabindex="0">
-      <span class="hb-l">${esc(x.l)}</span><span class="hb-t"><i style="width:${Math.max(x.n ? 2 : 0, x.n / max0 * 100)}%"></i></span>
-      <span class="hb-v"><b>${x.n}</b> <small>${i ? pct(x.n / max0) : ''}</small></span></div>`).join('');
 
   // por mes (últimos 6 meses, por fecha de la cotización)
   const h = hoy(), y = +h.slice(0, 4), m = +h.slice(5, 7);
@@ -241,76 +235,90 @@ function renderPanel() {
     return { mm, cot: del.reduce((s, c) => s + (+c.totales?.neto || 0), 0), apr: ap.reduce((s, c) => s + (+c.totales?.neto || 0), 0), n: del.length, na: ap.length };
   });
 
-  // clientes y productos (lo vendido en el período)
-  const porCliente = {};
-  for (const x of aprob) { const k = x.c.cliente.nombre || '—'; porCliente[k] = (porCliente[k] || 0) + (+x.t.neto || 0); }
-  const topCli = Object.entries(porCliente).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  const porProd = {};
-  for (const x of aprob) for (const it of x.c.items || []) {
-    const k = categoriaProducto(it), k2 = calcItem(it);
-    porProd[k] = porProd[k] || { v: 0, c: 0, u: 0 }; porProd[k].v += k2.venta; porProd[k].c += k2.costo; porProd[k].u += k2.cant;
-  }
-  const topProd = Object.entries(porProd).sort((a, b) => b[1].v - a[1].v).slice(0, 6);
+  const barras = filas => { const max = Math.max(1, ...filas.map(f => f.v));
+    return filas.map(f => `<div class="hb ${f.accion ? 'clic' : ''}" data-tip="${f.tip}" ${f.accion ? acc(f.accion) : 'tabindex="0"'}><span class="hb-l">${esc(f.l)}</span>
+      <span class="hb-t"><i style="width:${Math.max(2, f.v / max * 100)}%"></i></span><span class="hb-v">${f.txt}</span></div>`).join(''); };
+  const agrupar = (arr, clave) => { const o = {}; for (const x of arr) { const k = clave(x); o[k] = o[k] || { v: 0, n: 0, mg: 0 }; o[k].v += +x.t.neto || 0; o[k].mg += +x.t.margen || 0; o[k].n++; } return Object.entries(o).sort((a, b) => b[1].v - a[1].v); };
+
+  // estado de las cotizaciones del período
+  const porEstado = ESTADOS_COT.map(e => { const arr = cots.filter(x => x.e === e); return { e, n: arr.length, v: suma(arr) }; }).filter(x => x.n);
   const motivos = {};
   for (const x of rech) { const k = String(x.c.motivoRechazo || 'Sin motivo').split(':')[0]; motivos[k] = (motivos[k] || 0) + 1; }
-
-  const barras = (filas, max) => filas.map(f => `<div class="hb" data-tip="${f.tip}" tabindex="0"><span class="hb-l">${esc(f.l)}</span>
-      <span class="hb-t"><i style="width:${Math.max(2, f.v / max * 100)}%"></i></span><span class="hb-v">${f.txt}</span></div>`).join('');
-  const maxCli = Math.max(1, ...topCli.map(x => x[1])), maxProd = Math.max(1, ...topProd.map(x => x[1].v));
+  // clientes, tipos de producto y regiones (lo vendido en el período)
+  const topCli = agrupar(aprob, x => x.c.cliente.nombre || '—').slice(0, 7);
+  const porTipo = {};
+  for (const x of aprob) for (const it of x.c.items || []) {
+    const k = tipoProducto(it), k2 = calcItem(it);
+    porTipo[k] = porTipo[k] || { v: 0, c: 0, u: 0 }; porTipo[k].v += k2.venta; porTipo[k].c += k2.costo; porTipo[k].u += k2.cant;
+  }
+  const topTipo = Object.entries(porTipo).sort((a, b) => b[1].v - a[1].v).slice(0, 7);
+  const porRegion = agrupar(aprob, x => x.c.cliente.region || 'Sin región').slice(0, 7);
 
   // requiere atención
   const alertas = [];
-  for (const o of atrasadas) alertas.push(['bad', `OT ${o.numero} atrasada`, `${o.cliente?.nombre || ''} · entrega ${fechaCL(otEntrega(o))} · ${o.estado}`, 'ots']);
-  for (const x of vencido) alertas.push(['bad', `Factura N° ${x.c.factura.numero} vencida`, `${x.c.cliente.nombre} · ${clp(x.c.factura.total)} · venció ${fechaCL(x.c.factura.vence)}`, 'facturas']);
-  for (const x of porVencer) alertas.push(['warn', `Cotización N° ${numDoc(x.c)} vence ${fechaCL(venceCot(x.c))}`, `${x.c.cliente.nombre} · ${clp(x.t.neto)} neto · hacer seguimiento`, 'cotizaciones']);
-  for (const x of COTS.filter(c => estadoCot(c) === 'Vencida').slice(0, 5)) alertas.push(['warn', `Cotización N° ${numDoc(x)} venció sin respuesta`, `${x.cliente.nombre} · ${clp(x.totales?.neto)} neto · llamar o marcar rechazada`, 'cotizaciones']);
-  for (const x of porFacturar.filter(x => ['Despachada', 'Entregada', 'Terminada'].includes(otDe(x.c)?.estado))) alertas.push(['info', `Cotización N° ${numDoc(x.c)} lista para facturar`, `${x.c.cliente.nombre} · OT ${otDe(x.c).estado.toLowerCase()} · ${clp(x.c.totales?.bruto)}`, 'facturas']);
-  const proximas = OTS.filter(o => !otAtrasada(o) && !['Despachada', 'Entregada'].includes(o.estado) && otEntrega(o) >= hoy() && otEntrega(o) <= sumarDias(hoy(), 7));
-  for (const o of proximas) alertas.push(['info', `OT ${o.numero} se entrega ${fechaCL(otEntrega(o))}`, `${o.cliente?.nombre || ''} · ${o.estado}`, 'ots']);
+  const env = cots.filter(x => x.e === 'Enviada');
+  const porVencer = env.filter(x => { const v = venceCot(x.c); return v && v <= sumarDiasHabiles(hoy(), 3); });
+  for (const o of OTS.filter(otAtrasada)) alertas.push(['bad', `OT ${o.numero} atrasada`, `${o.cliente?.nombre || ''} · entrega ${fechaCL(otEntrega(o))} · ${o.estado}`, { ir: 'ots' }]);
+  for (const x of vencido) alertas.push(['bad', `Factura N° ${x.c.factura.numero} vencida`, `${x.c.cliente.nombre} · ${clp(x.c.factura.total)} · venció ${fechaCL(x.c.factura.vence)}`, { ir: 'fact', filtro: 'vencida' }]);
+  for (const x of porVencer) alertas.push(['warn', `Cotización ${numDoc(x.c)} vence ${fechaCL(venceCot(x.c))}`, `${x.c.cliente.nombre} · ${clp(x.t.neto)} neto · hacer seguimiento`, { ir: 'cot', estado: 'Enviada' }]);
+  for (const x of COTS.filter(c => estadoCot(c) === 'Vencida').slice(0, 5)) alertas.push(['warn', `Cotización ${numDoc(x)} venció sin respuesta`, `${x.cliente.nombre} · ${clp(x.totales?.neto)} neto · llamar o marcar rechazada`, { ir: 'cot', estado: 'Vencida' }]);
+  for (const x of porFacturar.filter(x => ['Despachada', 'Entregada', 'Terminada'].includes(otDe(x.c)?.estado))) alertas.push(['info', `Cotización ${numDoc(x.c)} lista para facturar`, `${x.c.cliente.nombre} · OT ${otDe(x.c).estado.toLowerCase()} · ${clp(x.c.totales?.bruto)}`, { ir: 'fact', filtro: 'porFacturar' }]);
+  for (const o of OTS.filter(o => !['Terminada', 'Despachada', 'Entregada'].includes(o.estado) && otEntrega(o) >= hoy() && otEntrega(o) <= sumarDias(hoy(), 7)))
+    alertas.push(['info', `OT ${o.numero} se entrega ${fechaCL(otEntrega(o))}`, `${o.cliente?.nombre || ''} · ${o.estado}`, { ir: 'ots' }]);
 
-  const prod = ESTADOS_OT.map(e => [e, OTS.filter(o => o.estado === e).length]);
-
+  const vacio = '<p class="empty">Sin ventas en el período.</p>';
   $('#panelCuerpo').innerHTML = `
-    <div class="kpis">${kpis}</div>
+    <div class="kpis seis">${kpis}</div>
     <div class="viz-grid">
-      <div class="card viz"><h3>Cotizado y aprobado por mes</h3><p class="hint">Neto, según la fecha de la cotización · últimos 6 meses</p>
+      <div class="card viz"><h3>Cotizado y aprobado por mes</h3><p class="hint">Neto, según la fecha de la cotización · <b>pincha una barra</b> para ver esas cotizaciones</p>
         <div class="leyenda"><span><i class="sw a"></i>Cotizado</span><span><i class="sw b"></i>Aprobado</span></div>
-        ${graficoMeses(porMes)}
+        ${graficoMeses(porMes, acc)}
         <details class="tabla-datos"><summary>Ver datos</summary><table class="list"><thead><tr><th>Mes</th><th class="num">Cotizado</th><th class="num">Aprobado</th><th class="num">N°</th></tr></thead>
           <tbody>${porMes.map(x => `<tr><td>${MESES_LARGO[+x.mm.slice(5) - 1]} ${x.mm.slice(0, 4)}</td><td class="num">${clp(x.cot)}</td><td class="num">${clp(x.apr)}</td><td class="num">${x.na} de ${x.n}</td></tr>`).join('')}</tbody></table></details></div>
-      <div class="card viz"><h3>Embudo comercial</h3><p class="hint">Cuántas cotizaciones del período llegaron a cada paso</p>
-        <div class="hbars embudo">${htmlEmbudo}</div></div>
-      <div class="card viz"><h3>Mejores clientes</h3><p class="hint">Venta neta aprobada en el período</p>
-        <div class="hbars">${topCli.length ? barras(topCli.map(([l, v]) => ({ l, v, txt: corto(v), tip: tip(l, clp(v) + ' neto') })), maxCli) : '<p class="empty">Sin ventas en el período.</p>'}</div></div>
-      <div class="card viz"><h3>Qué se vende</h3><p class="hint">Venta neta por tipo de producto y su margen</p>
-        <div class="hbars">${topProd.length ? barras(topProd.map(([l, x]) => ({ l, v: x.v, txt: `${corto(x.v)} <small>${pct(x.v ? (x.v - x.c) / x.v : 0)} mg</small>`, tip: tip(l, `${clp(x.v)} neto · ${x.u} u.`, `Margen ${pct(x.v ? (x.v - x.c) / x.v : 0)} (${clp(x.v - x.c)})`) })), maxProd) : '<p class="empty">Sin ventas en el período.</p>'}</div></div>
-    </div>
-    <div class="viz-grid">
+      <div class="card viz"><h3>Estado de las cotizaciones</h3><p class="hint">Del período · cantidad y monto neto</p>
+        <div class="hbars">${barras(porEstado.map(x => ({ l: x.e, v: x.v, txt: `<b>${x.n}</b> <small>${corto(x.v)}</small>`, tip: tip(x.e, `${x.n} cotizaciones · ${clp(x.v)} neto`, 'Clic para verlas'),
+          accion: { ir: 'cot', estado: x.e, extra: desde ? { tipo: 'desde', valor: desde, etiqueta: etqPer.toLowerCase() } : null } })))}</div>
+        <h3 style="margin-top:16px">Motivos de rechazo</h3>
+        ${Object.keys(motivos).length ? `<div class="hbars">${barras(Object.entries(motivos).sort((a, b) => b[1] - a[1]).map(([l, v]) => ({ l, v, txt: String(v), tip: tip(l, `${v} cotización(es)`, 'Clic para verlas'),
+          accion: { ir: 'cot', estado: 'Rechazada', extra: conDesde({ tipo: 'motivo', valor: l, etiqueta: 'motivo: ' + l }) } })))}</div>` : '<p class="empty">Sin rechazos en el período.</p>'}</div>
+      <div class="card viz"><h3>Mejores clientes</h3><p class="hint">Venta neta aprobada en el período · clic para ver sus cotizaciones</p>
+        <div class="hbars">${topCli.length ? barras(topCli.map(([l, x]) => ({ l, v: x.v, txt: corto(x.v), tip: tip(l, `${clp(x.v)} neto · ${x.n} venta${x.n === 1 ? '' : 's'}`),
+          accion: { ir: 'cot', estado: '', extra: { tipo: 'cliente', valor: l, etiqueta: l } } }))) : vacio}</div></div>
+      <div class="card viz"><h3>Ventas por tipo de producto</h3><p class="hint">Según el tipo elegido en cada producto · venta neta y margen</p>
+        <div class="hbars">${topTipo.length ? barras(topTipo.map(([l, x]) => ({ l, v: x.v, txt: `${corto(x.v)} <small>${pct(x.v ? (x.v - x.c) / x.v : 0)} mg</small>`,
+          tip: tip(l, `${clp(x.v)} neto · ${x.u} u.`, `Margen ${pct(x.v ? (x.v - x.c) / x.v : 0)} (${clp(x.v - x.c)})`),
+          accion: { ir: 'cot', estado: 'Aprobada', extra: conDesde({ tipo: 'producto', valor: l, etiqueta: l }) } }))) : vacio}</div></div>
       <div class="card"><h3>Requiere atención <small class="muted">${alertas.length}</small></h3>
-        ${alertas.length ? `<ul class="alertas">${alertas.slice(0, 12).map(([t, a, b, v]) => `<li class="${t}" data-ir="${v}"><b>${esc(a)}</b><span>${esc(b)}</span></li>`).join('')}</ul>` : '<p class="empty">Todo al día. 👌</p>'}</div>
-      <div class="card"><h3>Producción</h3>
-        <div class="prod">${prod.map(([e, n]) => `<div class="${n && e !== 'Entregada' ? '' : 'cero'}"><b>${n}</b><span>${e}</span></div>`).join('')}</div>
-        <p class="hint">${otsAbiertas.length} OT abiertas${atrasadas.length ? ` · <b class="atraso">${atrasadas.length} atrasada${atrasadas.length === 1 ? '' : 's'}</b>` : ' · ninguna atrasada'}</p>
-        <h3 style="margin-top:18px">Motivos de rechazo</h3>
-        ${Object.keys(motivos).length ? `<div class="hbars">${barras(Object.entries(motivos).sort((a, b) => b[1] - a[1]).map(([l, v]) => ({ l, v, txt: String(v), tip: tip(l, `${v} cotización(es)`) })), Math.max(...Object.values(motivos)))}</div>` : '<p class="empty">Sin rechazos en el período.</p>'}
-        <h3 style="margin-top:18px">Cobranza</h3>
-        <div class="kpis mini">${kpi('Por facturar', corto(totF(porFacturar)), `${porFacturar.length} venta(s)`)}${kpi('Por cobrar', corto(totF(porCobrar)), '')}${kpi('Vencido', corto(totF(vencido)), '', vencido.length ? 'bad' : '')}</div>
-      </div>
+        ${alertas.length ? `<ul class="alertas">${alertas.slice(0, 10).map(([t, a, b, o]) => `<li class="${t}" ${acc(o)}><b>${esc(a)}</b><span>${esc(b)}</span></li>`).join('')}</ul>` : '<p class="empty">Todo al día. 👌</p>'}</div>
+      <div class="card viz"><h3>Ventas por región</h3><p class="hint">Venta neta aprobada en el período, según la región del cliente</p>
+        <div class="hbars">${porRegion.length ? barras(porRegion.map(([l, x]) => ({ l, v: x.v, txt: corto(x.v), tip: tip(l, `${clp(x.v)} neto · ${x.n} venta${x.n === 1 ? '' : 's'}`),
+          accion: { ir: 'cot', estado: 'Aprobada', extra: conDesde({ tipo: 'region', valor: l, etiqueta: 'Región ' + l }) } }))) : vacio}</div></div>
     </div>`;
 }
-function categoriaProducto(it) {
+/* Tipo de producto según lo elegido en las listas (no según el nombre escrito). */
+function tipoProducto(it) {
   normalizarItem(it);
-  if (!esBandera(it)) return productoEf(it) || 'Otro';
-  const t = String(it.tipo || '');
-  if (/pabell/i.test(t)) return 'Pabellón nacional';
-  if (/sublimad/i.test(t)) return 'Bandera sublimada';
-  if (/aplicaci/i.test(t)) return 'Bandera con aplicación';
-  if (/cuadra/i.test(t)) return 'Banderas de cuadra';
-  if (/uniones/i.test(t)) return 'Bandera de uniones';
-  return t ? t.replace(/\s*\(.*?\)/, '').replace(/\s*\d\/Faz/i, '') : 'Bandera';
+  if (esBandera(it)) return it.tipo || 'Bandera (sin tipo)';
+  return it.producto === 'Otro' ? 'Otros productos' : it.producto || 'Otros productos';
 }
-/* Barras agrupadas por mes (SVG). Un eje, marcas delgadas, puntas redondeadas y tooltip por mes. */
-function graficoMeses(datos) {
+/* Filtros que llegan desde el panel a la lista de cotizaciones. */
+function coincideExtra(c, x) {
+  if (!x) return true;
+  if (x.desde && String(c.fecha) < x.desde) return false;
+  if (x.tipo === 'mes') return String(c.fecha).startsWith(x.valor);
+  if (x.tipo === 'cliente') return (c.cliente.nombre || '—') === x.valor;
+  if (x.tipo === 'region') return (c.cliente.region || 'Sin región') === x.valor;
+  if (x.tipo === 'producto') return (c.items || []).some(it => tipoProducto({ ...it }) === x.valor);
+  if (x.tipo === 'motivo') return String(c.motivoRechazo || 'Sin motivo').split(':')[0] === x.valor;
+  return true;
+}
+function ejecutarAccion(o) {
+  if (o.ir === 'cot') { FILTRO_COT = o.estado || ''; FILTRO_EXTRA = o.extra || null; $('#buscaCot').value = ''; mostrar('cotizaciones'); }
+  else if (o.ir === 'fact') { FILTRO_FACT = o.filtro || ''; mostrar('facturas'); }
+  else if (o.ir) mostrar(o.ir);
+}
+/* Barras agrupadas por mes (SVG). Cada barra se puede pinchar: lleva a las cotizaciones de ese mes. */
+function graficoMeses(datos, acc) {
   const W = 640, H = 230, L = 58, R = 8, T = 12, B = 28, n = datos.length;
   const max = Math.max(1, ...datos.map(d => Math.max(d.cot, d.apr)));
   const paso = Math.pow(10, Math.floor(Math.log10(max))), tope = Math.ceil(max / paso / 2) * paso * 2 || paso;
@@ -321,15 +329,21 @@ function graficoMeses(datos) {
   for (let k = 0; k <= 4; k++) { const v = tope * k / 4, y = yv(v);
     g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" class="grid"/><text x="${L - 8}" y="${y + 4}" class="ax" text-anchor="end">${corto(v).replace('$ ', '$')}</text>`; }
   datos.forEach((d, i) => {
-    const x0 = L + gw * i + (gw - (bw * 2 + 2)) / 2;
+    const x0 = L + gw * i + (gw - (bw * 2 + 2)) / 2, nombre = `${MESES_LARGO[+d.mm.slice(5) - 1]} ${d.mm.slice(0, 4)}`;
+    const t = tip(nombre, `Cotizado: ${clp(d.cot)} (${d.n})`, `Aprobado: ${clp(d.apr)} (${d.na})`, 'Clic para ver esas cotizaciones');
     g += `<path d="${barra(x0, d.cot)}" class="s-a"/><path d="${barra(x0 + bw + 2, d.apr)}" class="s-b"/>`;
     g += `<text x="${L + gw * i + gw / 2}" y="${H - 8}" class="ax" text-anchor="middle">${MESES[+d.mm.slice(5) - 1]}</text>`;
-    g += `<rect x="${L + gw * i}" y="${T}" width="${gw}" height="${H - T - B}" class="hit" tabindex="0" data-tip="${tip(`${MESES_LARGO[+d.mm.slice(5) - 1]} ${d.mm.slice(0, 4)}`, `Cotizado: ${clp(d.cot)} (${d.n})`, `Aprobado: ${clp(d.apr)} (${d.na})`)}"/>`;
+    const ex = { tipo: 'mes', valor: d.mm, etiqueta: nombre };
+    g += `<rect x="${L + gw * i}" y="${T}" width="${gw / 2}" height="${H - T - B}" class="hit" data-tip="${t}" ${acc({ ir: 'cot', estado: '', extra: ex })}/>`;
+    g += `<rect x="${L + gw * i + gw / 2}" y="${T}" width="${gw / 2}" height="${H - T - B}" class="hit" data-tip="${t}" ${acc({ ir: 'cot', estado: 'Aprobada', extra: ex })}/>`;
   });
   return `<svg viewBox="0 0 ${W} ${H}" class="grafico" role="img" aria-label="Cotizado y aprobado por mes">${g}</svg>`;
 }
 $('#panelPeriodo').addEventListener('click', e => { const b = e.target.closest('[data-per]'); if (!b) return; PERIODO = b.dataset.per; renderPanel(); });
-$('#panelCuerpo').addEventListener('click', e => { const li = e.target.closest('[data-ir]'); if (li) mostrar(li.dataset.ir); });
+const accionPanel = e => { const el = e.target.closest('[data-accion]'); if (!el) return; e.preventDefault(); document.getElementById('vizTip').style.display = 'none'; ejecutarAccion(JSON.parse(el.dataset.accion)); };
+$('#panelCuerpo').addEventListener('click', accionPanel);
+$('#panelCuerpo').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') accionPanel(e); });
+
 
 /* Tooltip único para los gráficos (texto plano). */
 (() => {
@@ -356,7 +370,7 @@ $('#panelCuerpo').addEventListener('click', e => { const li = e.target.closest('
     <button class="btn ghost danger" id="btnBorrarEjemplos">Borrar datos de ejemplo</button> <span class="hint" id="infoEjemplos"></span>`;
   vista.appendChild(card);
   const info = () => { const n = COTS.filter(c => c.demo).length, m = OTS.filter(o => o.demo).length; $('#infoEjemplos').textContent = n || m ? `${n} cotizaciones y ${m} OT de ejemplo` : 'No hay datos de ejemplo.'; };
-  $$('#tabs button').forEach(b => b.addEventListener('click', () => { if (b.dataset.view === 'config') info(); }));
+  $$('.topbar [data-view="config"]').forEach(b => b.addEventListener('click', info));
   $('#btnBorrarEjemplos').onclick = conBoton($('#btnBorrarEjemplos'), async () => {
     const cs = COTS.filter(c => c.demo), os = OTS.filter(o => o.demo);
     if (!cs.length && !os.length) { toast('No hay datos de ejemplo'); return; }
@@ -369,3 +383,134 @@ $('#panelCuerpo').addEventListener('click', e => { const li = e.target.closest('
     info();
   });
 })();
+
+/* ---------------- Adjuntos de facturación (factura y comprobante de pago) ---------------- */
+const MAX_ADJUNTO = 4 * 1024 * 1024;
+function leerComoDataUrl(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('no se pudo leer el archivo')); r.readAsDataURL(file); });
+}
+async function subirAdjunto(file, prefijo) {
+  if (!file) return null;
+  if (file.size > MAX_ADJUNTO) throw new Error('el archivo pesa más de 4 MB');
+  const data = await leerComoDataUrl(file), id = prefijo + uid();
+  if (nubeActiva()) await api('guardarImagen', { id, data });
+  IMGS.set(id, data);
+  return { id, nombre: file.name || 'archivo', tipo: file.type || '' };
+}
+async function verAdjunto(adj) {
+  const w = window.open('', '_blank');   // se abre antes de esperar, para que el navegador no lo bloquee
+  try {
+    let data = IMGS.get(adj.id);
+    if (!data && nubeActiva()) { data = (await api('leerImagenes', { ids: [adj.id] })).imagenes?.[adj.id]; if (data) IMGS.set(adj.id, data); }
+    if (!data) throw new Error('no se encontró el archivo');
+    const blob = await (await fetch(data)).blob(), url = URL.createObjectURL(blob);
+    if (w) w.location = url; else window.location.href = url;
+  } catch (e) { if (w) w.close(); toast('No se pudo abrir el archivo: ' + e.message); }
+}
+const linkAdj = (adj, k, texto) => adj ? `<a href="#" class="adj" data-adj="${k}" title="${esc(adj.nombre)}">📎 ${texto}</a>` : '';
+$('#tablaFact').addEventListener('click', async e => {
+  const a = e.target.closest('[data-adj], [data-adjuntar]'); if (!a) return;
+  e.preventDefault(); e.stopPropagation();
+  const c = COTS.find(x => x.id === a.closest('tr').dataset.id); if (!c?.factura) return;
+  if (a.dataset.adj) { verAdjunto(c.factura[a.dataset.adj]); return; }
+  const k = a.dataset.adjuntar, esFact = k === 'archivo';
+  const d = await pedirDatos(esFact ? `Adjuntar factura N° ${c.factura.numero}` : 'Adjuntar comprobante de pago', c.cliente.nombre,
+    [{ k: 'f', label: esFact ? 'Archivo de la factura (PDF o foto)' : 'Comprobante (PDF o foto)', type: 'file' }], 'Adjuntar');
+  if (!d?.f) return;
+  const antes = JSON.stringify(c.factura);
+  try { c.factura[k] = await subirAdjunto(d.f, esFact ? 'fac' : 'pag'); await guardarCotLista(c); toast('Archivo adjuntado'); }
+  catch (err) { c.factura = JSON.parse(antes); toast('No se pudo adjuntar: ' + err.message); }
+  renderFacturas();
+}, true);
+
+/* ---------------- Producción (solo lectura, desde el panel de producción del taller) ---------------- */
+const PANEL_PROD_URL = 'https://script.google.com/macros/s/AKfycbwAACl5LecQlRplOQqxINxjcPsoppWspspEyBN3xmsr2o7lrzMFhc6-1m-qydVLUrgP/exec';
+const PANEL_PROD_WEB = 'https://nicolasanavalon.github.io/taller-gary/';
+let PROD = null, PROD_CARGA = null, PROD_ERROR = '', FILTRO_PROD = 'curso';
+const textoOk = s => { s = String(s ?? '').trim(); if (/Ã|Â/.test(s)) { try { return decodeURIComponent(escape(s)); } catch (_) {} } return s; };
+const siNo = v => v === true || v === 'true' || v === 'True';
+function cargarProduccion(forzar) {
+  if (PROD && !forzar) return Promise.resolve(PROD);
+  if (PROD_CARGA) return PROD_CARGA;
+  PROD_ERROR = '';
+  PROD_CARGA = fetch(PANEL_PROD_URL).then(r => { if (!r.ok) throw new Error('el panel respondió ' + r.status); return r.json(); }).then(d => {
+    const filas = (d.rows || []).map(r => ({
+      ot: String(r.ot || '').trim(), cliente: textoOk(r.cliente), comuna: textoOk(r.comuna), producto: textoOk(r.producto),
+      cant: +r.cant || 0, medida: textoOk(r.medida), tela: textoOk(r.tela), etapa: textoOk(r.etapa), obs: textoOk(r.obs),
+      fCom: String(r.fCom || '').slice(0, 10), entregada: siNo(r.entregada), sublimada: siNo(r.sublimacion), aplicada: siNo(r.aplicada),
+      foto: typeof r.foto === 'string' && r.foto.startsWith('data:image') ? r.foto : '' }));
+    const enSublimacion = Array.isArray(d.sublimacion?.sublimado) ? d.sublimacion.sublimado.length : 0;
+    PROD = { filas, enSublimacion, hora: new Date() };
+    return PROD;
+  }).catch(e => { PROD_ERROR = e.message; throw e; }).finally(() => { PROD_CARGA = null; });
+  return PROD_CARGA;
+}
+function otsProduccion() {
+  const m = new Map();
+  for (const f of PROD.filas) {
+    const k = f.ot || '—';
+    if (!m.has(k)) m.set(k, { ot: k, cliente: f.cliente, comuna: f.comuna, fCom: f.fCom, items: [] });
+    const o = m.get(k); o.items.push(f); if (f.fCom && (!o.fCom || f.fCom < o.fCom)) o.fCom = f.fCom;
+  }
+  return [...m.values()].map(o => {
+    o.entregada = o.items.every(i => i.entregada);
+    o.unidades = o.items.filter(i => !i.entregada).reduce((s, i) => s + i.cant, 0);
+    o.atrasada = !o.entregada && o.fCom && o.fCom < hoy();
+    o.semana = !o.entregada && !o.atrasada && o.fCom && o.fCom <= sumarDias(hoy(), 7);
+    return o;
+  });
+}
+const ETQ_PROD = [['curso', 'En curso'], ['atrasadas', 'Atrasadas'], ['semana', 'Próximos 7 días'], ['entregadas', 'Entregadas'], ['todas', 'Todas']];
+const enFiltroProd = (o, f) => f === 'todas' || (f === 'curso' && !o.entregada) || (f === 'atrasadas' && o.atrasada) || (f === 'semana' && o.semana) || (f === 'entregadas' && o.entregada);
+function renderProduccion() {
+  if (!PROD) {
+    $('#prodKpis').innerHTML = ''; $('#filtrosProd').innerHTML = '';
+    $('#prodCuerpo').innerHTML = PROD_ERROR
+      ? `<div class="card empty">No se pudo leer el panel de producción (${esc(PROD_ERROR)}). <a href="${PANEL_PROD_WEB}" target="_blank" rel="noopener">Abrir el panel de producción ↗</a> · <a href="#" data-prod-recargar>Reintentar</a></div>`
+      : '<div class="card empty">Cargando el panel de producción…</div>';
+    if (!PROD_ERROR) cargarProduccion().then(renderProduccion, renderProduccion);
+    return;
+  }
+  const ots = otsProduccion(), curso = ots.filter(o => !o.entregada);
+  const unidades = curso.reduce((s, o) => s + o.unidades, 0);
+  const atr = curso.filter(o => o.atrasada), sem = curso.filter(o => o.semana);
+  const clicK = (f, html) => `<div class="kpi clic ${FILTRO_PROD === f ? 'sel' : ''}" data-fprod="${f}" tabindex="0">${html}</div>`;
+  $('#prodKpis').innerHTML = [
+    clicK('curso', `<small>OT en curso</small><b>${curso.length}</b><span>${unidades} producto${unidades === 1 ? '' : 's'} por entregar</span>`),
+    clicK('atrasadas', `<small>Atrasadas</small><b class="${atr.length ? 'neg' : ''}">${atr.length}</b><span>pasó la fecha comprometida</span>`),
+    clicK('semana', `<small>Se entregan en 7 días</small><b>${sem.length}</b><span>OT comprometidas esta semana</span>`),
+    clicK('entregadas', `<small>Entregadas</small><b>${ots.length - curso.length}</b><span>OT completas en el panel</span>`),
+    kpi('En sublimación', String(PROD.enSublimacion), 'en la cola de sublimado'),
+  ].join('');
+  $('#filtrosProd').innerHTML = ETQ_PROD.map(([k, l]) => `<button type="button" class="chip ${FILTRO_PROD === k ? 'active' : ''}" data-fprod="${k}">${l} <small>${ots.filter(o => enFiltroProd(o, k)).length}</small></button>`).join('') +
+    `<span class="prod-act">Actualizado ${PROD.hora.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })} · <a href="#" data-prod-recargar>actualizar</a> · <a href="${PANEL_PROD_WEB}" target="_blank" rel="noopener">abrir panel de producción ↗</a></span>`;
+  const q = normTxt($('#buscaProd').value || '');
+  const vis = ots.filter(o => enFiltroProd(o, FILTRO_PROD) && (!q || normTxt([o.ot, o.cliente, o.comuna, ...o.items.map(i => i.producto)].join(' ')).includes(q)))
+    .sort((a, b) => FILTRO_PROD === 'entregadas' || FILTRO_PROD === 'todas' ? (+b.ot || 0) - (+a.ot || 0) : String(a.fCom || '9999').localeCompare(String(b.fCom || '9999')));
+  $('#prodCuerpo').innerHTML = vis.length ? `<div class="prod-ots">${vis.slice(0, 120).map(o => `
+    <div class="card prod-ot ${o.atrasada ? 'atr' : ''}">
+      <div class="po-head"><b>OT ${esc(o.ot)}</b><span>${esc(o.cliente)}${o.comuna ? ' · ' + esc(o.comuna) : ''}</span>
+        <span class="po-fecha">${o.entregada ? '<span class="badge Entregada">Entregada</span>' : `${o.atrasada ? '<span class="badge Vencida">Atrasada</span>' : ''} compromiso <b>${fechaCL(o.fCom) || '—'}</b>`}</span></div>
+      ${o.items.map(i => `<div class="po-item ${i.entregada ? 'ok' : ''}">
+        ${i.foto ? `<img src="${i.foto}" alt="" loading="lazy">` : `<span class="po-sinfoto">${ICONO_BANDERA}</span>`}
+        <div class="po-txt"><b>${esc(i.producto || 'Producto')}</b>
+          <span>${i.cant} u.${i.medida ? ' · ' + esc(i.medida) : ''}${i.tela ? ' · ' + esc(i.tela) : ''}${i.sublimada ? ' · sublimada' : ''}${i.aplicada ? ' · aplicada' : ''}</span>
+          ${i.obs ? `<small>${esc(i.obs)}</small>` : ''}</div>
+        <span class="po-etapa">${i.entregada ? '✓ entregado' : esc(i.etapa || 'sin etapa')}</span></div>`).join('')}
+    </div>`).join('')}</div>${vis.length > 120 ? '<p class="hint">Se muestran las primeras 120 OT. Usa el buscador para encontrar otras.</p>' : ''}`
+    : '<div class="card empty">No hay OT en este filtro.</div>';
+}
+$('#view-produccion').addEventListener('click', e => {
+  const f = e.target.closest('[data-fprod]'); if (f) { FILTRO_PROD = f.dataset.fprod; renderProduccion(); return; }
+  if (e.target.closest('[data-prod-recargar]')) { e.preventDefault(); PROD = null; PROD_ERROR = ''; renderProduccion(); }
+});
+$('#buscaProd').addEventListener('input', () => { if (PROD) renderProduccion(); });
+
+/* ---------------- Menú de ajustes (Matriz de costos y Configuración) ---------------- */
+$('#btnAjustes').addEventListener('click', e => {
+  e.stopPropagation(); const a = $('#ajustes'); a.classList.toggle('abierto'); $('#btnAjustes').setAttribute('aria-expanded', a.classList.contains('abierto'));
+});
+document.addEventListener('click', e => { if (!e.target.closest('#ajustes')) $('#ajustes').classList.remove('abierto'); });
+
+/* La aplicación parte en el Panel. */
+if (vistaActual() === 'panel') { document.body.dataset.vista = 'panel'; renderPanel(); }

@@ -4,26 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cotizador Gary</title>
-<link rel="stylesheet" href="estilos.css?v=20261126e">
+<link rel="stylesheet" href="estilos.css?v=20261126g">
 </head>
 <body>
 <header class="topbar no-print">
   <div class="brand"><img src="logo-compacto.png" alt="Gary"><span>Cotizador</span></div>
   <nav id="tabs">
-    <button data-view="panel">Panel</button>
-    <button data-view="cotizar" class="active">Cotizar</button>
+    <button data-view="panel" class="active">Panel</button>
+    <button data-view="cotizar">Cotizar</button>
     <button data-view="cotizaciones">Cotizaciones</button>
     <button data-view="ots">Órdenes de trabajo</button>
+    <button data-view="produccion">Producción</button>
     <button data-view="facturas">Facturación</button>
-    <button data-view="matriz">Matriz de costos</button>
-    <button data-view="config">Configuración</button>
   </nav>
   <span id="nube" class="nube"></span>
+  <div class="ajustes" id="ajustes">
+    <button type="button" class="ajustes-btn" id="btnAjustes" aria-haspopup="true" aria-expanded="false" title="Ajustes">⚙<span> Ajustes</span></button>
+    <div class="ajustes-menu" role="menu">
+      <button data-view="matriz" role="menuitem">Matriz de costos</button>
+      <button data-view="config" role="menuitem">Configuración</button>
+    </div>
+  </div>
 </header>
 
 <main class="no-print">
   <!-- ============ COTIZAR ============ -->
-  <section id="view-cotizar" class="view active">
+  <section id="view-cotizar" class="view">
     <div class="view-head">
       <h1 id="cotTitulo">Nueva cotización</h1>
       <div class="actions">
@@ -123,6 +129,7 @@
     </div>
     <div class="flujo-hint">Borrador → <b>Enviada</b> → <b>Aprobada</b> (crea la OT) → producción → entrega → <b>Factura</b> → <b>Pago</b></div>
     <div class="chips filtros" id="filtrosCot"></div>
+    <div id="filtroExtra"></div>
     <div class="card table-wrap"><table class="list" id="tablaCot"></table></div>
   </section>
 
@@ -130,6 +137,16 @@
   <section id="view-ots" class="view">
     <div class="view-head"><h1>Órdenes de trabajo</h1></div>
     <div class="card table-wrap"><table class="list" id="tablaOt"></table></div>
+  </section>
+
+  <!-- ============ PRODUCCIÓN (solo lectura) ============ -->
+  <section id="view-produccion" class="view">
+    <div class="view-head"><h1>Producción</h1>
+      <input id="buscaProd" class="search" placeholder="Buscar OT, cliente o producto"></div>
+    <p class="flujo-hint">Vista de solo lectura del panel de producción del taller. Los cambios se hacen en el panel de producción.</p>
+    <div id="prodKpis" class="kpis"></div>
+    <div class="chips filtros" id="filtrosProd"></div>
+    <div id="prodCuerpo"></div>
   </section>
 
   <!-- ============ FACTURACIÓN ============ -->
@@ -143,7 +160,7 @@
   </section>
 
   <!-- ============ PANEL ============ -->
-  <section id="view-panel" class="view">
+  <section id="view-panel" class="view active">
     <div class="view-head"><h1>Panel</h1><div class="chips" id="panelPeriodo"></div></div>
     <div id="panelCuerpo"></div>
   </section>
@@ -360,8 +377,8 @@
   <div class="vista-papel"><div id="vistaDoc"></div></div>
 </dialog>
 
-<script src="despacho.js?v=20261126e"></script>
-<script src="app.js?v=20261126e"></script>
-<script src="panel.js?v=20261126e"></script>
+<script src="despacho.js?v=20261126g"></script>
+<script src="app.js?v=20261126g"></script>
+<script src="panel.js?v=20261126g"></script>
 </body>
 </html>

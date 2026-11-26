@@ -679,6 +679,8 @@ function refrescarVista() {
   const v = vistaActual();
   if (v === 'cotizaciones') renderCotizaciones();
   if (v === 'ots') renderOts();
+  if (v === 'panel') renderPanel();
+  if (v === 'facturas' && !$('#dlgForm').open) renderFacturas();
   if (v === 'matriz' && !$('#tablaMatriz').contains(document.activeElement)) renderMatriz();
   if (v === 'matriz' && !$('#view-matriz').contains(document.activeElement) && !timerComp) renderComp();
   if (v === 'config' && !$('#view-config').contains(document.activeElement)) renderConfig();
@@ -843,18 +845,21 @@ function descItem(it) {
 /* ---------------- Navegación ---------------- */
 function mostrar(view) {
   document.body.dataset.vista = view;   // las listas y el panel usan todo el ancho de la pantalla
-  $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $$('.topbar [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $('#btnAjustes')?.classList.toggle('active', view === 'matriz' || view === 'config');
+  $('#ajustes')?.classList.remove('abierto');
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
   if (view === 'cotizaciones') renderCotizaciones();
   if (view === 'panel') renderPanel();
   if (view === 'facturas') renderFacturas();
+  if (view === 'produccion') renderProduccion();
   if (view === 'ots') renderOts();
   if (view === 'matriz') { renderMatriz(); renderComp(); }
   if (view === 'config') renderConfig();
   window.scrollTo(0, 0);
   if (view !== 'cotizar') actualizar();
 }
-$$('#tabs button').forEach(b => b.onclick = () => mostrar(b.dataset.view));
+$$('.topbar [data-view]').forEach(b => b.onclick = () => mostrar(b.dataset.view));
 
 /* ---------------- Editor de cotización ---------------- */
 function chipsHtml(valor, attr) {
@@ -2088,34 +2093,38 @@ $('#btnOtPdf').onclick = conBoton($('#btnOtPdf'), async () => { if (await guarda
 window.addEventListener('resize', () => { if ($('#dlgOt').open) vistaOt(); });
 
 /* ---------------- Lista de cotizaciones ---------------- */
-let FILTRO_COT = '';
+let FILTRO_COT = '', FILTRO_EXTRA = null;
 function renderCotizaciones() {
   const q = ($('#buscaCot').value || '').toLowerCase();
   const conEstado = COTS.map(c => ({ c, e: estadoCot(c) }));
   const cuenta = e => conEstado.filter(x => x.e === e).length;
   $('#filtrosCot').innerHTML = [['', 'Todas', COTS.length], ...ESTADOS_COT.map(e => [e, e === 'Enviada' ? 'Enviadas' : e === 'Borrador' ? 'Borradores' : e + 's', cuenta(e)])]
     .map(([v, l, n]) => `<button type="button" class="chip ${FILTRO_COT === v ? 'active' : ''}" data-filtro="${v}">${l} <small>${n}</small></button>`).join('');
-  const rows = conEstado.filter(({ c, e }) => (!FILTRO_COT || e === FILTRO_COT) &&
+  $('#filtroExtra').innerHTML = FILTRO_EXTRA ? `<span class="filtro-extra">Filtro del panel: <b>${esc(FILTRO_EXTRA.etiqueta || FILTRO_EXTRA.valor)}</b>
+    <button type="button" data-quitar-extra title="Quitar filtro">✕</button></span>` : '';
+  const rows = conEstado.filter(({ c, e }) => (!FILTRO_COT || e === FILTRO_COT) && coincideExtra(c, FILTRO_EXTRA) &&
     (!q || String(c.numero).toLowerCase().includes(q) || (c.cliente.nombre || '').toLowerCase().includes(q)));
   if (!rows.length) { $('#tablaCot').innerHTML = `<tr><td class="empty">${COTS.length ? 'Sin resultados.' : 'Aún no hay cotizaciones guardadas.'}</td></tr>`; return; }
-  $('#tablaCot').innerHTML = `<thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>ID MP</th><th class="num">Neto</th><th class="num">Margen $</th><th class="num">Margen %</th><th>Estado</th><th>Siguiente paso</th><th></th></tr></thead><tbody>` +
+  $('#tablaCot').innerHTML = `<thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>ID MP</th><th class="num">Neto</th><th class="num">Margen $</th><th class="num">Margen %</th><th>Estado</th><th></th></tr></thead><tbody>` +
     rows.map(({ c, e }) => { const t = c.totales || {}; const ot = OTS.find(o => o.cotId === c.id); const fe = estadoFactura(c);
-      const paso = e === 'Borrador' ? '<button class="btn sm" data-a="enviada">✉ Marcar enviada</button>'
-        : e === 'Enviada' || e === 'Vencida' ? '<button class="btn sm ok" data-a="aprobar">✓ Aprobar</button> <button class="btn sm ghost" data-a="rechazar">Rechazar</button>'
-        : e === 'Aprobada' ? `${ot ? `<span class="paso">OT ${esc(ot.numero)} · ${esc(ot.estado)}</span><br>` : ''}<a href="#" class="paso-fact ${fe.clase}" data-a="facturacion">${esc(fe.texto)}</a>`
-        : `<small class="muted">${esc(c.motivoRechazo || '')}</small>`;
+      const paso = e === 'Borrador' ? '<button class="btn sm" data-a="enviada">✉ Enviada</button>'
+        : e === 'Enviada' || e === 'Vencida' ? '<button class="btn sm ok" data-a="aprobar">Aprobar</button> <button class="btn sm ghost" data-a="rechazar">Rechazar</button>' : '';
+      const sub = e === 'Aprobada' ? `${ot ? `<small class="muted">OT ${esc(ot.numero)} · ${esc(ot.estado)}</small><br>` : ''}<a href="#" class="paso-fact ${fe.clase}" data-a="facturacion">${esc(fe.texto)}</a>`
+        : e === 'Rechazada' ? `<small class="muted">${esc(c.motivoRechazo || '')}</small>`
+        : e === 'Enviada' && c.fechaEnvio ? `<small class="muted">enviada ${fechaCL(c.fechaEnvio)}</small>` : '';
       return `<tr data-id="${c.id}"><td><b>${esc(numDoc(c))}</b>${c.demo ? ' <span class="badge Ejemplo">ejemplo</span>' : ''}</td><td>${fechaCL(c.fecha)}</td><td>${esc(c.cliente.nombre)}</td>
       <td><small>${esc(c.idExterno || '—')}</small></td>
       <td class="num">${clp(t.neto)}</td><td class="num">${clp(t.margen)}</td><td class="num"><b>${pct(t.margenPct)}</b></td>
-      <td><span class="badge ${e}">${e}</span>${e === 'Enviada' && c.fechaEnvio ? `<br><small class="muted">enviada ${fechaCL(c.fechaEnvio)}</small>` : ''}</td>
-      <td class="paso-cel">${paso}</td>
+      <td class="est-cel"><span class="badge ${e}">${e}</span>${sub ? '<br>' + sub : ''}</td>
       <td class="acc">
         <button class="btn sm" data-a="abrir">Abrir</button>
         <button class="btn sm" data-a="pdf">PDF</button>
+        ${paso}
         <button class="btn sm ghost" data-a="duplicar">Duplicar</button>
         <button class="btn sm ghost danger" data-a="borrar">Borrar</button></td></tr>`; }).join('') + '</tbody>';
 }
 $('#filtrosCot').addEventListener('click', e => { const b = e.target.closest('[data-filtro]'); if (!b) return; FILTRO_COT = b.dataset.filtro; renderCotizaciones(); });
+$('#filtroExtra').addEventListener('click', e => { if (e.target.closest('[data-quitar-extra]')) { FILTRO_EXTRA = null; renderCotizaciones(); } });
 $('#buscaCot').oninput = renderCotizaciones;
 $('#tablaCot').addEventListener('click', async e => {
   const a = e.target.dataset.a; if (!a) return;

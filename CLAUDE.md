@@ -107,11 +107,19 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - **Facturación**: ventas aprobadas → "Emitir factura" (N° a mano, fecha, días de crédito según condición de pago,
   monto neto editable para anticipos) → "Registrar pago". Estados: Por facturar, Por cobrar, Vencida, Pagada.
   Se guarda en `cot.factura`. Integración con SII pendiente.
-- **Panel** (KPI): cotizado, vendido, tasa de aprobación (cantidad y monto), margen de lo vendido, venta promedio,
-  días para aprobar, en carpeta, por cobrar/vencido; gráficos por mes, embudo, mejores clientes, qué se vende,
-  requiere atención, producción, motivos de rechazo y cobranza. Filtro: este mes / 3 meses / año / todo.
-- Tabla de cotizaciones: ID, fecha, cliente, **ID MP** (Mercado Público), neto, margen $, margen %, estado, siguiente paso y acciones (sin total bruto). Tabla de OT: **OT** (número), **ID** (de la cotización), fecha, entrega, cliente, productos, estado. Las listas y el panel usan todo el ancho.
-- Los archivos JS/CSS llevan `?v=` en index.html: **cambiar la versión en cada publicación** para que los navegadores no usen la copia vieja.
+- **La aplicación abre en el Panel.** Menú: Panel · Cotizar · Cotizaciones · Órdenes de trabajo · Producción ·
+  Facturación; Matriz de costos y Configuración van dentro de **⚙ Ajustes** (arriba a la derecha).
+- **Panel** (KPI, interactivo tipo Power BI): cotizado, vendido, tasa de aprobación, margen de lo vendido, venta
+  promedio y **por cobrar** (sin "días para aprobar", "en carpeta", embudo ni cuadro de producción: el dueño no los quiere).
+  Gráficos: cotizado/aprobado por mes, estado de las cotizaciones + motivos de rechazo, mejores clientes, **ventas por
+  tipo de producto** (según el tipo elegido en las listas, no el nombre escrito), requiere atención, ventas por región.
+  **Todo se puede pinchar**: lleva a Cotizaciones (o Facturación/OT) con el filtro aplicado ("Filtro del panel ✕").
+- **Producción** (solo lectura): lee el panel de producción del taller (taller-gary, misma URL que usa la revisión
+  diaria de imágenes) y muestra las OT en curso, atrasadas, próximas 7 días y entregadas, con foto, etapa y compromiso.
+  No escribe nada; los cambios se hacen en el panel de producción.
+- **Facturación**: se puede **adjuntar el archivo de la factura** y el **comprobante de pago** (PDF o foto, máx. 4 MB;
+  se guardan en la hoja Imagenes como `fac…`/`pag…`; `cot.factura.archivo` / `cot.factura.comprobante`).
+- Cotizaciones: sin columna "Siguiente paso"; Enviada / Aprobar / Rechazar van junto a Abrir, PDF, Duplicar, Borrar.
 - **Datos de ejemplo**: cotizaciones E1–E11 y OT 543–548 marcadas `demo: true`, sin usar la numeración real.
   Se borran en Configuración → "Borrar datos de ejemplo".
 
