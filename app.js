@@ -1689,13 +1689,25 @@ async function imprimirCotizacion(c) {
 }
 
 /* Vista previa: muestra la cotización tal como la recibe el cliente, sin guardar. */
-async function verCotizacion() {
-  await asegurarImagenes(D.items);
+function copiaParaVista() {
   const c = JSON.parse(JSON.stringify(D));
   c.items = c.items.filter(i => +i.cantidad > 0 && calcItem(i).precioU);
-  if (!c.items.length) { toast('Agrega al menos un producto con costo para ver la cotización'); return; }
   if (!c.numero) c.fecha = hoy();
-  $('#vistaDoc').innerHTML = htmlCotizacion(c, true);
+  return c;
+}
+/* Muestra la cotización limpia (como la recibe el cliente) o en modo edición. */
+function pintarVista(editar) {
+  $('#vistaDoc').innerHTML = htmlCotizacion(copiaParaVista(), editar);
+  $('#dlgVista').classList.toggle('editando', editar);
+  $('#btnVistaEditar').textContent = editar ? '✓ Listo' : '✎ Editar';
+  $('#btnVistaEditar').classList.toggle('primary', editar); $('#btnVistaEditar').classList.toggle('ghost', !editar);
+  $('#vistaTitulo').textContent = editar ? 'Editando: pincha un texto para cambiarlo' : 'Así la ve el cliente';
+  if ($('#dlgVista').open) ajustarVista();
+}
+async function verCotizacion() {
+  await asegurarImagenes(D.items);
+  if (!copiaParaVista().items.length) { toast('Agrega al menos un producto con costo para ver la cotización'); return; }
+  pintarVista(false);
   VISTA_EDITADA = false;
   $('#dlgVista').showModal();
   ajustarVista();
@@ -1711,6 +1723,7 @@ function ajustarVista() {
 window.addEventListener('resize', () => { if ($('#dlgVista').open) ajustarVista(); });
 $$('[data-ver]').forEach(b => b.onclick = verCotizacion);
 $('#btnVistaCerrar').onclick = () => $('#dlgVista').close();
+$('#btnVistaEditar').onclick = () => { pintarVista(!$('#dlgVista').classList.contains('editando')); $('.vista-papel').scrollTop = 0; };
 /* Lo que se edita en la vista previa queda en la cotización (y en el formulario). */
 let VISTA_EDITADA = false;
 $('#vistaDoc').addEventListener('input', e => {

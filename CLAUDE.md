@@ -85,9 +85,9 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
   columna Material; despacho gratis; descuento solo si se aplica.
 - Cotización: plazo de entrega y validez muestran **solo "N días hábiles"** (la fecha calculada se ve en
   el editor). Nota de imágenes: solo "Imágenes referenciales."
-- **Vista previa editable** ("Así la ve el cliente"): se pincha y edita datos del cliente (nombre, ID,
+- **Vista previa** ("Así la ve el cliente"): se abre **limpia**; con el botón **✎ Editar** (junto a Cerrar) se pincha y edita datos del cliente (nombre, ID,
   RUT, atención, teléfono, email, dirección, comuna), garantía, nombre y descripción de cada producto y
-  la nota destacada al pie; se guarda en la cotización y en el formulario. El PDF sale sin marcas de edición.
+  la nota destacada al pie; se guarda en la cotización y en el formulario. **✓ Listo** vuelve a la vista limpia. El PDF sale sin marcas de edición.
 - OT: sin precios, sin checklist ni firmas; terminación en tipo oración.
 - Validez y plazo de entrega en días hábiles (se descuentan feriados).
 
