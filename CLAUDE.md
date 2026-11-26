@@ -90,8 +90,9 @@ Estas reglas las definió el dueño del taller. Respetarlas siempre; no cambiarl
 - **Vista previa** ("Así la ve el cliente"): se abre **limpia**; con el botón **✎ Editar** (junto a Cerrar) se pincha y edita datos del cliente (nombre, ID,
   RUT, atención, teléfono, email, dirección, comuna), garantía, nombre y descripción de cada producto y
   la nota destacada al pie; se guarda en la cotización y en el formulario. **✓ Listo** vuelve a la vista limpia. El PDF sale sin marcas de edición.
-- **"Guardar y generar PDF" descarga el archivo PDF** (no abre imprimir); igual para la OT. Se genera con
-  html2pdf.js en el navegador; si no carga la librería, se abre imprimir como respaldo.
+- **"Guardar y generar PDF" descarga el archivo PDF** (no abre imprimir). **La cotización se dibuja con jsPDF (pdf.js)**,
+  con texto real: en Safari la "foto" de la página (html2canvas) juntaba palabras y cortaba el ancho. Carta, una hoja si cabe,
+  mismo diseño (tarjetas, tabla con imagen, totales, transferencia, sellos, pie). La OT sigue con html2pdf.js.
 - **"Costos en Excel"** (junto a Ver cotización): descarga el cuadro de costos con **una columna por producto**
   (Cant. / Costo / Total), filas por componente, Subtotal A, flete/financiero/imprevisto, Subtotal B, costo
   unitario, margen, precio, cantidad y totales, con fórmulas de Excel (como el Excel del papá).
